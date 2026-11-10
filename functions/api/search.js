@@ -4,7 +4,7 @@ export async function onRequestGet({request}) {
  if(q.length<2)return Response.json({error:'Typ minimaal twee letters.'},{status:400});
  const normalize=s=>(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
  const tokens=normalize(q).split(/\s+/).filter(Boolean);
- const fields='code,product_name,product_name_nl,brands,stores,stores_tags,nutriments,image_front_small_url,image_front_url,image_small_url,image_url';
+ const fields='code,product_name,product_name_nl,brands,stores,stores_tags,nutriments,image_front_small_url,image_front_url,image_front_display_url,image_small_url,image_url';
  const variants=[q];if(tokens.length>1)variants.push(tokens.slice(0,-1).join(' '));
  if(tokens.length>1)variants.push(tokens[tokens.length-1]);
  const uniqueVariants=[...new Set(variants)].slice(0,3);
@@ -33,7 +33,7 @@ export async function onRequestGet({request}) {
   let score=0;if(title===normalize(q))score+=100;if(title.startsWith(normalize(q)))score+=50;
   for(const t of tokens){if(words.includes(t))score+=22;else if(words.some(w=>w.startsWith(t)))score+=12;else if(title.includes(t))score+=5;else score-=18}
   if(p.image_front_small_url||p.image_front_url)score+=2;
-  products.push({code:p.code,name,brand:p.brands||'',image:p.image_front_small_url||p.image_front_url||p.image_small_url||p.image_url||null,protein,kcal,score});
+  products.push({code:p.code,name,brand:p.brands||'',image:p.image_front_url||p.image_front_display_url||p.image_url||p.image_front_small_url||p.image_small_url||null,protein,kcal,score});
  }
  products.sort((a,b)=>b.score-a.score||a.name.localeCompare(b.name,'nl'));
  return Response.json({products:products.slice(0,40).map(({score,...p})=>p)},{headers:{'Cache-Control':'public, max-age=180'}});
