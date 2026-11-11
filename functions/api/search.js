@@ -29,6 +29,8 @@ const timeout=ms=>AbortSignal.timeout(ms);
 async function discover(q,shop){
  const query='site:'+shop.domain+' '+q;
  const endpoints=[
+  ...(shop.store==='Albert Heijn'?[ 'https://www.ah.nl/zoeken/api/products/search?query='+encodeURIComponent(q), 'https://www.ah.nl/zoeken?query='+encodeURIComponent(q) ]:[]),
+  ...(shop.store==='Jumbo'?[ 'https://www.jumbo.com/zoeken?searchType=keyword&searchTerms='+encodeURIComponent(q) ]:[]),
   'https://www.bing.com/search?format=rss&q='+encodeURIComponent(query),
   'https://www.google.com/search?q='+encodeURIComponent(query)+'&num=12'
  ];
@@ -37,10 +39,35 @@ async function discover(q,shop){
   try{
    const r=await fetch(endpoint,{headers:{Accept:'text/html, application/rss+xml, application/xml', 'User-Agent':'Mozilla/5.0 (compatible; EiwitKcalSearch/1.0)'},signal:timeout(3500)});
    if(!r.ok)return;
-   const body=(await r.text()).slice(0,220000);
+   const body=(await r.text()).slice(0,600000);
+   // AH zoek-API kan JSON met productkaarten leveren. Haal uitsluitend
+   // echte AH-productpagina's op; verzin nooit voedingswaarden uit zoekresultaten.
+   if(shop.store==='Albert Heijn' && endpoint.includes('/zoeken/api/products/search')){
+    try{
+     const data=JSON.parse(body);
+     const visit=(node,depth=0)=>{
+      if(depth>12||!node||typeof node!=='object')return;
+      if(Array.isArray(node)){for(const x of node.slice(0,160))visit(x,depth+1);return}
+      const id=node.id||node.productId;
+      const title=node.title||node.name;
+      if(/^\d{3,9}$/.test(String(id||'')) && typeof title==='string' && title.length>2){
+       const slug=normalize(title).replace(/ /g,'-');
+       candidates.push('https://www.ah.nl/producten/product/wi'+id+'/'+slug);
+      }
+      for(const [key,value] of Object.entries(node)){
+       if(['products','cards','items','results','data','product'].includes(key))visit(value,depth+1);
+      }
+     };visit(data);
+    }catch{}
+   }
    // RSS <link>, gewone zoeklinks en gecodeerde Google /url?q= links.
    for(const match of body.matchAll(/(?:<link>\s*|href=["']|\/url\?q=)(https?(?:%3A%2F%2F|:\/\/)[^"'<\s&]+|https?[^"'<\s]+)(?:["'<\s&]|$)/gi))candidates.push(match[1]);
    for(const match of body.matchAll(/https?:\/\/(?:www\.)?(?:ah\.nl|jumbo\.com|plus\.nl)\/[^"'<\s&]+/gi))candidates.push(match[0]);
+   // Productlinks op de eigen zoekpagina zijn vaak relatieve URL's.
+   for(const match of body.matchAll(/(?:\\u002F|\/)(?:producten\\u002F|producten\/)(?:product\\u002F|product\/)?[^"'<>\s?&]{4,180}/gi)){
+    const path=match[0].replace(/\\u002F/gi,'/');
+    candidates.push('https://www.'+shop.domain+path);
+   }
   }catch{}
  }));
  const urls=new Map();
@@ -78,6 +105,7 @@ export async function onRequestGet({request}){
  const terms=[...new Set([q,words(q).join(' '),...words(q).filter(w=>w.length>=4)])].filter(Boolean).slice(0,3);
  const fresh=(await Promise.all(active.flatMap(shop=>terms.map(term=>liveProducts(term,shop).catch(()=>[]))))).flat().filter(p=>matches(p,q));
  const unique=new Map();for(const p of [...fresh,...known])unique.set(p.productUrl||p.id,p);
- const products=[...unique.values()].sort((a,b)=>Number(b.verifiedStorePage)-Number(a.verifiedStorePage));
- return Response.json({products,source:'Supermarktproductpagina’s + gecontroleerde catalogus (zoekversie 3)',liveChecked:active.map(x=>x.store),note:'Live zoeken is afhankelijk van toegang tot de websites. Niet gevonden betekent niet dat een winkel het product niet verkoopt.'},{headers:{'Cache-Control':'public, max-age=600'}});
+ const rank={'Albert Heijn':0,'Jumbo':1,'PLUS':2,'Picnic':3};
+ const products=[...unique.values()].sort((a,b)=>(rank[a.store]??9)-(rank[b.store]??9)||Number(b.verifiedStorePage)-Number(a.verifiedStorePage));
+ return Response.json({products,source:'Supermarktproductpagina’s + gecontroleerde catalogus (AH API + productpagina’s; zoekversie 5)',liveChecked:active.map(x=>x.store),note:'Live zoeken is afhankelijk van toegang tot de websites. Niet gevonden betekent niet dat een winkel het product niet verkoopt.'},{headers:{'Cache-Control':'public, max-age=60'}});
 }
