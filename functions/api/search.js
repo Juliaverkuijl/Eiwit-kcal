@@ -231,8 +231,22 @@ export async function onRequestGet({ request }) {
         return null;
       }
 
+      // Gebruik uitsluitend waarden van DEZELFDE Open Food Facts-productrecord.
+      // Ontbrekende waarden blijven null, nooit 0.
+      const optionalPer100g = key => {
+        const value = p.nutriments?.[key];
+        if (value === undefined || value === null || value === '') return null;
+        const n = Number(value);
+        return Number.isFinite(n) && n >= 0 ? n : null;
+      };
+
       return {
         id: p.code,
+        code: p.code,
+        fat: optionalPer100g('fat_100g'),
+        sugar: optionalPer100g('sugars_100g'),
+        carbs: optionalPer100g('carbohydrates_100g'),
+        nutritionSource: 'Open Food Facts (zelfde productrecord)',
         name: p.product_name || 'Naam onbekend',
         brand: p.brands || '',
         store: ah ? 'Albert Heijn' : 'Jumbo',
