@@ -1,5 +1,7 @@
 import catalog from './verified-products.json';
 const normalize=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+const aliases={amerikaanse:'',amerikaans:'',american:'',pancakes:'pancake',pannenkoeken:'pancake',pannenkoek:'pancake',pannekoeken:'pancake',pannekoek:'pancake',cracottes:'cracotte',cracotte:'cracotte',knackebrod:'cracotte',knackebrood:'cracotte'};
+const words=s=>normalize(s).split(' ').map(w=>Object.hasOwn(aliases,w)?aliases[w]:w).filter(Boolean);
 const shops=[
  {store:'Albert Heijn',domain:'ah.nl',path:/^\/producten\/product\/wi\d+\//},
  {store:'Jumbo',domain:'jumbo.com',path:/^\/producten\/[^/]+\/?$/},
@@ -38,14 +40,14 @@ async function liveProducts(q,shop){
   try{const r=await fetch(url.href,{headers:{Accept:'text/html'},signal:AbortSignal.timeout(4500)});if(!r.ok)return null;const p=parsePage((await r.text()).slice(0,900000),url,shop.store);return p&&matches(p,q)?p:null}catch{return null}
  })))).filter(Boolean)}catch{return []}
 }
-function queryTerms(q){return normalize(q).split(' ').filter(w=>w.length>1&&!['ah','albert','heijn','jumbo','plus','picnic','american','amerikaanse','amerikaans','naturel','original'].includes(w)).map(w=>({pancake:'pancake',pancakes:'pancake',pannenkoek:'pancake',pannenkoeken:'pancake'}[w]||w));}
-function matches(p,q){const terms=queryTerms(q);const hay=normalize(p.name+' '+p.brand).replace(/pannenkoeken?|pancakes?/g,'pancake');return terms.length>0&&terms.every(t=>hay.includes(t));}
+function matches(p,q){const terms=words(q).filter(w=>w.length>1&&!['ah','albert','heijn','jumbo','plus','picnic'].includes(w));const hay=words(p.name+' '+p.brand);return terms.length>0&&terms.every(t=>hay.some(h=>h===t||h.startsWith(t)||t.startsWith(h)&&h.length>=3));}
 export async function onRequestGet({request}){
  const url=new URL(request.url),q=(url.searchParams.get('q')||'').trim(),filter=url.searchParams.get('store')||'both';
  if(q.length<2)return Response.json({products:[],error:'Vul minimaal twee letters in.'},{status:400});
  const known=catalog.filter(p=>allowed(p.store,filter)&&matches(p,q));
  const active=shops.filter(s=>allowed(s.store,filter));
- const fresh=known.length>=2?[]:(await Promise.all(active.map(s=>liveProducts(q,s)))).flat();
+ const queries=[q,...words(q).filter(w=>w.length>=3)];
+ const fresh=known.length>=2?[]:(await Promise.all(active.map(async shop=>{for(const term of [...new Set(queries)]){const found=await liveProducts(term,shop);const matching=found.filter(p=>matches(p,q));if(matching.length)return matching;}return [];}))).flat();
  const unique=new Map();for(const p of [...fresh,...known])unique.set(p.productUrl||p.id,p);
  const products=[...unique.values()].sort((a,b)=>Number(b.verifiedStorePage)-Number(a.verifiedStorePage));
  return Response.json({products,source:'Supermarktproductpagina’s + gecontroleerde catalogus',liveChecked:active.map(x=>x.store),note:'Live zoeken is afhankelijk van toegang tot de websites. Niet gevonden betekent niet dat een winkel het product niet verkoopt.'},{headers:{'Cache-Control':'public, max-age=300'}});
