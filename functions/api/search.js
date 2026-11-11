@@ -38,7 +38,7 @@ async function discover(q,shop){
 async function liveProducts(q,shop){
  try{const urls=await discover(q,shop);return (await Promise.all(urls.map(async url=>{
   try{const r=await fetch(url.href,{headers:{Accept:'text/html'},signal:AbortSignal.timeout(4500)});if(!r.ok)return null;const p=parsePage((await r.text()).slice(0,900000),url,shop.store);return p&&matches(p,q)?p:null}catch{return null}
- })))).filter(Boolean)}catch{return []}
+ }))).filter(Boolean)}catch{return []}
 }
 function matches(p,q){const terms=words(q).filter(w=>w.length>1&&!['ah','albert','heijn','jumbo','plus','picnic'].includes(w));const hay=words(p.name+' '+p.brand);return terms.length>0&&terms.every(t=>hay.some(h=>h===t||h.startsWith(t)||t.startsWith(h)&&h.length>=3));}
 export async function onRequestGet({request}){
