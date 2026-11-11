@@ -204,7 +204,7 @@ body{background:#f3f6f5;padding-bottom:76px}.top h1{font-size:25px}.nav{position
 @media(max-width:520px){.resultStoreBadge{font-size:11px;padding:4px 7px}}
 </style><style>
 .dayLockRow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:12px 0 4px;padding:11px;border:1px solid #dce8e1;border-radius:12px;background:#f6faf8}.dayLockRow strong{font-size:13px}.dayLockRow .small{margin:3px 0 0}.lockSwitch{width:88px;height:38px;border-radius:25px;background:#dbe7e1;border:1px solid #bfd1c7;padding:4px;display:flex;align-items:center;justify-content:flex-start;transition:background .2s;flex-shrink:0}.lockSwitch .lockKnob{width:28px;height:28px;border-radius:50%;background:white;box-shadow:0 1px 5px #0002;display:grid;place-items:center;transition:transform .2s}.lockSwitch.locked{background:#16765d}.lockSwitch.locked .lockKnob{transform:translateX(49px)}.lockSwitch:focus-visible{outline:3px solid #88cbb8}.histLock{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 2px}.histLock button{font-size:12px}.histLock .small{margin:0}
-</style><style>
+<style>
 /* Compact dagoverzicht: maaltijden en dagvergrendeling zo veel mogelijk in één scherm */
 @media(max-width:600px){
  body{padding-bottom:66px}
@@ -257,47 +257,45 @@ body{background:#f3f6f5;padding-bottom:76px}.top h1{font-size:25px}.nav{position
  .nav button{min-height:36px;font-size:11px}
 }
 </style><style>
-/* Extra compacte startpagina op telefoon: kerninformatie en drie maaltijden direct zichtbaar. */
+/* Iets ruimere iPhone-indeling; compacte koppeling blijft behouden. */
 @media(max-width:600px){
- .wrap{padding:3px 8px 12px!important}
- .top{margin:0 2px 3px!important}.top h1{font-size:18px!important}.top p{display:none}
- #syncPanel{padding:5px 9px!important;margin:3px 0!important;border-width:1px!important}
- #syncNotice{margin:0!important;gap:0!important}
- #syncHeadline{font-size:12px!important}
- #syncNoticeText{display:none!important}
- #syncPanel summary{font-size:10px!important;margin-top:2px}
- #day{padding:7px 9px!important;margin:4px 0!important}
- #day .dayHeading{margin-bottom:4px!important}
- #day .dayEyebrow{font-size:9px!important}
- #day .dayHeading h2{font-size:17px!important}
- #day .dayHeadingIcon{padding:3px!important;font-size:14px!important}
- #day .summaryTiles{margin-bottom:3px!important;gap:5px!important}
- #day .summaryTile{min-height:58px!important;padding:6px 8px!important}
- #day .summaryTile .tileLabel{font-size:10px!important;margin:0!important}
- #day .summaryTile strong{font-size:21px!important;margin:0!important}
- #day .summaryTile span:last-child{font-size:10px!important}
- #day .extraNutrientsToggle{margin:3px 0!important;padding:5px 7px!important}
- #day .extraNutrientsToggle>summary{font-size:10px!important}
- #day .progressBlock{margin-top:4px!important}
- #day .progressBlock p{font-size:10px!important;margin:0 0 2px!important}
- #day .bar{height:5px!important}
- #day>details{margin-top:4px!important;padding-top:3px!important}
- #day>details>summary{font-size:10px!important}
- #todayPage>.card{padding:7px 9px!important;margin:4px 0!important}
- #todayPage>.card>h2{font-size:13px!important;margin:0 0 3px!important}
- .meal{margin:3px 0!important;padding:4px 7px!important;border-radius:8px!important}
- .mealhead{min-height:26px!important;gap:5px!important}
- .mealhead .mealicon{font-size:16px!important}
- .mealhead .mealname{font-size:12px!important}
- .mealhead .mealvalues{font-size:10px!important}
- .copyPanel{margin-top:4px!important;padding:5px 7px!important}
- .copyPanel:not([open]) .flex,.copyPanel:not([open]) p{display:none!important}
- #closeDayCard{padding:6px 9px!important}
- .dayLockRow{padding:4px 6px!important;margin:0 0 3px!important}
- .dayLockRow .small{display:none!important}
- .lockSwitch{height:30px!important}
- #closeDayCard>p.small{display:none!important}
- #closeDay{padding:5px!important}
+ .wrap{padding:7px 10px 18px}
+ .top{margin:2px 2px 7px}
+ #syncPanel{padding:8px 11px;margin:4px 0 8px}
+ #syncNotice{margin-bottom:4px}
+ #day{padding:13px 13px;margin:8px 0}
+ #day .dayHeading{margin-bottom:9px}
+ #day .dayEyebrow{font-size:10px}
+ #day .dayHeading h2{font-size:20px}
+ #day .dayHeadingIcon{font-size:18px;padding:7px}
+ #day .summaryTiles{gap:8px;margin-bottom:10px}
+ #day .summaryTile{padding:12px 11px;min-height:88px}
+ #day .summaryTile .tileLabel{font-size:11px;margin-bottom:4px}
+ #day .summaryTile strong{font-size:27px;margin-bottom:4px}
+ #day .summaryTile span:last-child{font-size:12px}
+ #day .extraNutrientsToggle{padding:9px 10px;margin:8px 0}
+ #day .extraNutrientsToggle>summary{font-size:12px}
+ #day .progressBlock{margin-top:9px}
+ #day .progressBlock p{font-size:12px!important;margin:0 0 5px!important}
+ #day .bar{height:10px}
+ #day>details{margin-top:9px;padding-top:8px}
+ #day>details>summary{font-size:12px}
+ #todayPage>.card{margin:8px 0;padding:12px 12px}
+ #todayPage>.card>h2{font-size:16px;margin:0 0 7px}
+ .meal{margin:7px 0;padding:10px 11px;border-radius:11px}
+ .mealhead{min-height:37px;gap:8px}
+ .mealhead .mealicon{font-size:19px}
+ .mealhead .mealname{font-size:13px}
+ .mealhead .mealvalues{font-size:11px}
+ .copyPanel{margin-top:8px;padding:10px 11px}
+ .copyPanel>summary{font-size:12px}
+ #closeDayCard{padding:10px 12px!important}
+ .dayLockRow{margin:0 0 7px;padding:9px 10px}
+ .dayLockRow strong{font-size:13px}
+ .lockSwitch{height:37px;width:86px;padding:4px}
+ .lockSwitch .lockKnob{height:27px;width:27px}
+ .lockSwitch.locked .lockKnob{transform:translateX(48px)}
+ #closeDay{padding:9px!important;font-size:12px}
 }
 </style></head><body><div id="photoViewer" hidden role="dialog" aria-modal="true" aria-label="Vergrote productfoto"><button type="button" id="photoViewerClose" aria-label="Sluiten">×</button><img id="photoViewerImage" alt="Vergrote productfoto"><div id="photoViewerCaption"></div></div><main class="wrap"><header class="top"><div><h1>🥑 Eiwit & Kcal</h1><p>Snel zoeken, berekenen en bijhouden</p></div><span class="topchip">Julia’s dag</span></header>
 <section id="todayPage" class="page"><section class="card sync-disconnected" id="syncPanel"><div id="syncNotice" role="status" aria-live="polite"><strong id="syncHeadline">🔴 NIET GEKOPPELD</strong><span id="syncNoticeText">Deze telefoon deelt wijzigingen momenteel niet met Marit. Open hieronder om eenmalig te koppelen.</span></div><details id="syncDetails"><summary style="cursor:pointer;font-weight:700">☁ Synchronisatie met Marit <span id="syncIndicator" class="small">(niet gekoppeld)</span></summary><p class="small">Koppel deze telefoon één keer met de geheime gezinscode. Daarna synchroniseert het dagboek automatisch, zonder opnieuw inloggen. Je hoeft niet handmatig te synchroniseren. Beide telefoons kunnen tegelijk producten toevoegen.</p><label for="pairCode">Eenmalige koppelcode</label><input id="pairCode" type="password" autocomplete="off" placeholder="Geheime code (eenmalig)" style="width:100%"><div class="flex" style="margin-top:10px"><button id="syncConnect" type="button">Telefoon koppelen</button><button id="syncDisconnect" type="button" class="mutedbtn">Dit apparaat ontkoppelen</button></div><p id="syncStatus" class="small" aria-live="polite">Niet gekoppeld</p></details></section><section class="card" id="day"><div class="dayHeading"><div><span class="dayEyebrow">DAGOVERZICHT</span><h2>Vandaag <span class="daytag" id="dateLabel"></span></h2></div><span class="dayHeadingIcon" aria-hidden="true">📊</span></div><div class="summaryTiles"><div class="summaryTile proteinTile"><span class="tileLabel">🥚 Eiwit gegeten</span><strong id="proteinBig">0,0 g</strong><span id="proteinRemaining"></span></div><div class="summaryTile kcalTile"><span class="tileLabel">🔥 Calorieën gegeten</span><strong id="kcalBig">0 kcal</strong><span id="kcalRemaining"></span></div></div><details class="extraNutrientsToggle"><summary>🥑 Overige voedingswaarden <span class="small">(vetten, suikers, koolhydraten)</span></summary><div class="grid extraNutrients"><div class="metric">🥑 Vetten<strong id="fatBig">—</strong></div><div class="metric">🍬 Suikers<strong id="sugarBig">—</strong></div><div class="metric">🌾 Koolhydraten<strong id="carbBig">—</strong></div></div><p class="small" id="nutrientCoverage">Ontbrekende waarden worden niet als nul geteld.</p><p class="small">Vanaf nu kun je deze waarden bij nieuwe producten registreren. Eerdere dagen zonder waarden blijven onbekend; suikers zijn onderdeel van koolhydraten.</p></details><div class="progressBlock proteinProgress"><p id="proteinSummary"></p><div class="bar"><div id="proteinFill" class="fill"></div></div></div><div class="progressBlock kcalProgress"><p id="kcalSummary"></p><div class="bar"><div id="kcalFill" class="fill"></div></div></div><details><summary class="settingsline">⚙ Dagdoelen instellen</summary><div class="flex"><div><label for="limit">Eiwitlimiet (g)</label><input id="limit" type="number" min="0" step="0.1" value="21.5"/></div><div><label for="kcalGoal">Kcal-doel</label><input id="kcalGoal" type="number" min="0" step="1" value="1600"/></div></div></details></section><section class="card"><h2>Maaltijden</h2><div id="mealSections"></div><details class="copyPanel"><summary><strong>📋 Zelfde maaltijd als gisteren</strong></summary><div class="flex"><select id="copyMeal"><option value="ochtend">☀️ Ochtend</option><option value="middag">🥪 Middag</option><option value="avond">🌙 Avond</option></select><button type="button" id="copyYesterday">Kopieer van gisteren</button></div><p class="small" id="copyStatus">Je kunt de gekopieerde hoeveelheden daarna aanpassen.</p></details></section><section class="card" id="closeDayCard"><div class="dayLockRow"><div><strong id="todayLockLabel">Dag ontgrendeld</strong><p class="small" id="todayLockHint">Schuif om de dag vast te zetten.</p></div><button type="button" id="todayLockSwitch" class="lockSwitch" role="switch" aria-checked="false" aria-label="Dag vergrendelen of ontgrendelen"><span class="lockKnob">🔓</span></button></div><button id="closeDay" class="mutedbtn" style="width:100%">Dag vergrendelen en opslaan</button><p class="small">Elke toevoeging wordt automatisch opgeslagen. Een nieuwe kalenderdag begint leeg.</p></section></section><section id="productPage" class="page" hidden><section class="card"><h2>🔎 Product zoeken</h2><p class="small">Bij elk nieuw product berekenen we eiwit, kcal, vetten, suikers en koolhydraten voor de gekozen hoeveelheid. Ontbrekende waarden blijven onbekend (—), nooit automatisch 0. Controleer bij Julia altijd de voedingswaarden op het etiket.</p><label for="store">Supermarkt</label><select id="store"><option value="both">Alle supermarkten</option><option value="ah">Albert Heijn</option><option value="jumbo">Jumbo</option><option value="picnic">Picnic</option><option value="plus">PLUS</option></select><label for="query">Productnaam</label><div class="search"><div class="suggestWrap"><input id="query" placeholder="Bijv. Picnic pasta, PLUS yoghurt, AH brood" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="suggestions"/><button id="clearQuery" type="button" aria-label="Zoektekst wissen" title="Zoektekst wissen" hidden>×</button><div id="suggestions" class="suggestions" role="listbox" hidden></div></div><button id="searchBtn">Zoeken</button></div><div class="flex" style="margin-top:9px;align-items:center;flex-wrap:wrap"><input id="supermarketUrl" type="url" placeholder="Plak een productlink van AH of Jumbo" aria-label="Productlink van Albert Heijn of Jumbo" style="flex:1;min-width:190px"><button type="button" id="supermarketUrlBtn" class="mutedbtn">Product ophalen</button></div><p class="small">Directe productlink: probeert voedingswaarden van de supermarktwebsite te lezen. Alleen gevonden waarden worden gebruikt; controleer altijd het etiket.</p><div class="flex" style="margin-top:9px;align-items:center;flex-wrap:wrap"><button id="scanBtn" type="button" class="mutedbtn">📷 Barcode scannen</button><input id="barcodeManual" inputmode="numeric" autocomplete="off" placeholder="Of barcode invoeren" aria-label="Barcode invoeren" style="flex:1;min-width:150px"><button id="barcodeLookup" type="button" class="mutedbtn">Opzoeken</button></div><div id="scanArea" hidden style="margin-top:10px"><video id="scanVideo" autoplay muted playsinline style="width:100%;max-height:300px;background:#101918;border-radius:10px"></video><p class="small" id="scanMessage">Richt de camera op de streepjescode.</p><button id="scanStop" type="button" class="mutedbtn">Camera sluiten</button></div><p id="status" class="small" aria-live="polite"></p><details class="quickPanel" id="quickPanel"><summary style="cursor:pointer;font-weight:750;color:#087e72">⭐ Favorieten en recent gebruikt <span id="quickCount" class="small"></span> · tik om uit te klappen</summary><div style="margin-top:10px"><div class="quickTabs"><button type="button" id="quickFav" class="active">⭐ Favorieten</button><button type="button" id="quickRecent">🕘 Recent</button></div><div id="quickProducts"></div><p class="small">Favorieten en recente producten worden op dit apparaat bewaard.</p></div></details><div id="results"></div></section>
