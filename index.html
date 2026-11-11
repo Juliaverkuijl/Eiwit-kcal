@@ -535,15 +535,22 @@ const smartAliases={oriko:'oreo',oreoo:'oreo',choco:'chocolade',chocopasta:'choc
 function smartWords(q){return smartNormalize(q).split(' ').filter(Boolean).map(w=>smartAliases[w]||w)}
 function smartDistance(a,b){if(Math.abs(a.length-b.length)>3)return 9;const v=Array.from({length:b.length+1},(_,i)=>i);
  for(let i=1;i<=a.length;i++){let prev=v[0];v[0]=i;for(let j=1;j<=b.length;j++){const old=v[j];v[j]=Math.min(v[j]+1,v[j-1]+1,prev+(a[i-1]===b[j-1]?0:1));prev=old}}return v[b.length]}
-function smartScore(p,q){const words=smartWords(q),name=smartNormalize([p.name,p.brand,p.store].join(' '));
- const parts=name.split(' ');if(!words.length)return 0;let score=0;
- for(const w of words){if(name===w)score+=80;else if(parts.includes(w))score+=35;
- else if(name.includes(w))score+=23;else if(parts.some(t=>t.startsWith(w)||w.startsWith(t)&&t.length>=4))score+=14;
- else if(parts.some(t=>smartDistance(t,w)<=Math.max(1,Math.floor(w.length/4))))score+=8;
- else score-=22}
- if(smartNormalize(p.name).startsWith(smartNormalize(q)))score+=22;
+function smartScore(p,q){
+ const query=smartWords(q).filter(w=>!['ah','jumbo','picnic','plus','albert','heijn'].includes(w));
+ const name=smartNormalize(p.name), brand=smartNormalize(p.brand), words=(name+' '+brand).split(' ');
+ if(!query.length)return 0;
+ let score=0;
+ for(const w of query){
+  if(words.includes(w))score+=35;
+  else if(words.some(t=>t.length>=3&&(t.startsWith(w)||w.startsWith(t)&&t.length>=4)))score+=23;
+  else if(words.some(t=>t.length>=4&&smartDistance(t,w)<=Math.min(2,Math.floor(w.length/4))))score+=12;
+  else return -100;
+ }
+ if(name===smartNormalize(q))score+=50;
+ if(name.startsWith(smartNormalize(q)))score+=20;
  return score;
 }
+function smartStorePriority(p){const shop=smartNormalize(p.store);return shop==='albert heijn'||shop==='jumbo'?0:shop==='picnic'||shop==='plus'?1:2}
 function smartVariants(q){const cleaned=smartNormalize(q),words=smartWords(q);
  const variants=[q,words.join(' ')];
  if(words.length>1){variants.push(words.slice().reverse().join(' '));variants.push(words.filter(w=>w.length>3).join(' '));}
@@ -568,17 +575,18 @@ async function search(){
   const variants=smartVariants(q);let products=[],errors=[],seen=new Set();
   // Begin met de oorspronkelijke zoekopdracht; probeer alternatieven bij weinig treffers.
   for(let i=0;i<variants.length;i++){
-   if(i>0&&products.length>=12)break;
+   if(i>0&&products.filter(p=>smartScore(p,q)>=20).length>=12)break;
    try{const found=await smartFetch(variants[i],store);
     if(sequence!==smartSearchSequence)return;
     for(const p of found){const id=productId(p);if(!seen.has(id)){seen.add(id);products.push(p)}}
    }catch(e){errors.push(e.message||String(e))}
   }
   if(sequence!==smartSearchSequence)return;
-  products.sort((a,b)=>smartScore(b,q)-smartScore(a,q));
+  products=products.filter(p=>smartScore(p,q)>=20);
+  products.sort((a,b)=>smartStorePriority(a)-smartStorePriority(b)||Number(!!b.dutchMarket)-Number(!!a.dutchMarket)||Number(!!b.dutchLanguage)-Number(!!a.dutchLanguage)||smartScore(b,q)-smartScore(a,q));
   const data={products:products.slice(0,40)};
   $('status').textContent=products.length?
-   `${products.length} producten gevonden · beste overeenkomsten bovenaan${variants.length>1?' · ook op vergelijkbare namen gezocht':''}`:
+   `${products.length} producten gevonden · eerst AH en Jumbo, daarna Picnic en PLUS${variants.length>1?' · ook op vergelijkbare namen gezocht':''}`:
    `Geen producten gevonden.${errors.length?' Zoekservice mogelijk niet bereikbaar: '+errors[0]: ' Probeer een andere naam of scan de barcode.'}`;
   rememberSearch(q);
   data.products.forEach(p=>{let el=document.createElement('div');el.className='result';let img=document.createElement('img');img.alt='Productfoto van '+p.name;if(p.image){img.src=p.image;img.className='productZoom';img.tabIndex=0;img.setAttribute('role','button');img.setAttribute('aria-label','Vergroot foto van '+p.name);img.onclick=()=>openProductPhoto(p.image,p.name);img.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openProductPhoto(p.image,p.name)}}}else img.style.visibility='hidden';let detail=document.createElement('div');detail.className='details';let title=document.createElement('div');title.textContent=`${p.name} · ${p.brand||p.store}${p.code?' · '+p.code:''}`;let info=document.createElement('div');info.className='small';info.textContent=productInfoText(p)[0];detail.append(title);const storeName=String(p.store||'').trim();const storeKey=storeName.toLocaleLowerCase('nl-NL');const storeLabel=document.createElement('div');storeLabel.className='resultStoreBadge '+(storeKey==='albert heijn'?'storeAH':storeKey==='jumbo'?'storeJumbo':storeKey==='picnic'?'storePicnic':storeKey==='plus'?'storePlus':'storeUnknown');storeLabel.textContent=storeKey==='albert heijn'?'🛒 Albert Heijn':storeKey==='jumbo'?'🛒 Jumbo':storeKey==='picnic'?'🛒 Picnic':storeKey==='plus'?'🛒 PLUS':'🏷️ Supermarkt onbekend · Open Food Facts';storeLabel.title='Winkelinformatie volgens de beschikbare productgegevens; controleer de verpakking.';detail.append(storeLabel,info);if(p.quantity){let pack=document.createElement('div');pack.className='small';pack.textContent=productInfoText(p)[1]||('Verpakkingsinhoud: '+p.quantity);detail.append(pack)}if(p.portion?.grams>0){let line=document.createElement('div');line.className='portion';line.textContent=`Per ${p.portion.source==='portie'?'portie':'stuk'} (${fmt(p.portion.grams)} g): ${fmtProtein(p.protein*p.portion.grams/100)} g eiwit · ${fmt(p.kcal*p.portion.grams/100,0)} kcal`; detail.append(line)}let favBtn=document.createElement('button');favBtn.textContent=explicitFavs.some(x=>productId(x)===productId(p))?'★':'☆';favBtn.className='mutedbtn';favBtn.style.width='auto';favBtn.title='Favoriet aan- of uitzetten';favBtn.dataset.favId=productId(p);favBtn.onclick=()=>toggleFavorite(p);let btn=document.createElement('button');btn.textContent='Kies';btn.onclick=()=>{trackRecent(p);choose(p)};el.append(img,detail,favBtn,btn);$('results').append(el)})
