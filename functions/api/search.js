@@ -107,6 +107,15 @@ export async function onRequestGet({ request }) {
       .replace(/[^a-z0-9]+/g, ' ')
       .trim();
 
+    // 'AH pasta', 'pasta AH', 'Albert Heijn pasta' en 'Jumbo pasta'
+    // werken ook als de supermarktselector op 'AH en Jumbo' staat.
+    const storeTerms = /\b(albert heijn|ah|jumbo)\b/g;
+    const mentioned = [...normalized.matchAll(storeTerms)].map(m => m[1]);
+    const requestedStore = mentioned.some(x => x === 'ah' || x === 'albert heijn') ? 'ah'
+      : mentioned.includes('jumbo') ? 'jumbo' : null;
+    const productTerm = normalized.replace(storeTerms, ' ').replace(/\s+/g, ' ').trim();
+    const effectiveStore = store === 'both' && requestedStore ? requestedStore : store;
+    const rankingTerm = productTerm || normalized;
     const aliases = [
       [/\b(between|b tween|btween|b twe en)\b/g, "b'tween"],
       [/\b(between|b tween|btween|b twe en)\b/g, 'hero'],
@@ -116,6 +125,11 @@ export async function onRequestGet({ request }) {
     ];
 
     const variants = [q];
+    if (productTerm && productTerm !== normalized) {
+      variants.push(productTerm);
+      if (requestedStore === 'ah') variants.push('Albert Heijn ' + productTerm);
+      if (requestedStore === 'jumbo') variants.push('Jumbo ' + productTerm);
+    }
 
     for (const [pattern, replacement] of aliases) {
       if (pattern.test(normalized)) {
@@ -207,9 +221,8 @@ export async function onRequestGet({ request }) {
         brand.includes('jumbo');
 
       if (
-        !(ah || jumbo) ||
-        (store === 'ah' && !ah) ||
-        (store === 'jumbo' && !jumbo)
+        (effectiveStore === 'ah' && !ah) ||
+        (effectiveStore === 'jumbo' && !jumbo)
       ) {
         return null;
       }
@@ -249,7 +262,7 @@ export async function onRequestGet({ request }) {
         nutritionSource: 'Open Food Facts (zelfde productrecord)',
         name: p.product_name || 'Naam onbekend',
         brand: p.brands || '',
-        store: ah ? 'Albert Heijn' : 'Jumbo',
+        store: ah ? 'Albert Heijn' : jumbo ? 'Jumbo' : 'Open Food Facts',
         protein,
         kcal,
         image:
@@ -266,29 +279,48 @@ export async function onRequestGet({ request }) {
       ...new Map(products.map(p => [p.id, p])).values()
     ];
 
-    const tokens = normalized
+    const tokens = rankingTerm
       .split(' ')
       .filter(x => x.length > 2);
 
+    // Rangschik op productnaam en producttype, niet alleen op een woord
+    // dat ergens in merk of beschrijving voorkomt.
+    const pastaTypes = /\b(penne|fusilli|spaghetti|macaroni|farfalle|rigatoni|tagliatelle|linguine|lasagnebladen|schelpjes|conchiglie|orzo|tortiglioni|pastaschelpjes)\b/;
+    const pastaRelated = /\b(pesto|saus|sauce|pastasaus|soep|salade|maaltijd|kant.en.klaar|dressing|kruiden|mix|chips|spread)\b/;
     const score = p => {
-      const title = clean(p.name + ' ' + p.brand);
+      const name = clean(p.name).replace(/[^a-z0-9]+/g, ' ').trim();
+      const brand = clean(p.brand);
+      const words = name.split(/\s+/);
       let n = 0;
-
-      if (title.includes(normalized)) n += 10;
-
+      const shop = clean(p.store);
+      const matchingStore = (effectiveStore === 'ah' && shop === 'albert heijn') ||
+        (effectiveStore === 'jumbo' && shop === 'jumbo');
+      // Een expliciet merk of supermarktwoord moet relevant zijn, ook als
+      // het niet letterlijk in de productnaam staat.
+      if (matchingStore) n += 65;
+      if (requestedStore && matchingStore) n += 65;
+      if (name === rankingTerm) n += 150;
+      if (name.startsWith(rankingTerm + ' ')) n += 85;
+      if (words.includes(rankingTerm)) n += 65;
+      if (name.includes(rankingTerm)) n += 35;
+      if (brand.includes(rankingTerm)) n += 5;
       for (const token of tokens) {
-        if (title.includes(token)) n += 3;
+        if (words.includes(token)) n += 24;
+        else if (name.includes(token)) n += 10;
+        if (brand.split(/[^a-z0-9]+/).includes(token)) n += 28;
+        else if (brand.includes(token)) n += 14;
+        if (shop.includes(token)) n += 8;
       }
-
-      if (
-        /between|btween|b tween/.test(normalized) &&
-        /b.?tween|between/.test(title)
-      ) {
-        n += 15;
+      // 'Pasta' moet echte pasta tonen vóór pesto, sauzen en maaltijden.
+      if (rankingTerm === 'pasta' || rankingTerm === 'pastas') {
+        if (pastaTypes.test(name)) n += 90;
+        if (/\b(pasta|deegwaren)\b/.test(name)) n += 45;
+        if (pastaRelated.test(name)) n -= 110;
       }
-
-      if (p.image) n += 1;
-
+      if (/between|btween|b tween/.test(rankingTerm) && /b.?tween|between/.test(name)) n += 50;
+      if (p.store !== 'Open Food Facts') n += 12;
+      if (p.image) n += 3;
+      if (p.fat !== null && p.sugar !== null && p.carbs !== null) n += 2;
       return n;
     };
 
@@ -296,7 +328,8 @@ export async function onRequestGet({ request }) {
 
     return Response.json({
       products: unique,
-      source: 'Open Food Facts; winkeltoewijzing op basis van productmetadata'
+      source: 'Open Food Facts; winkeltoewijzing op basis van productmetadata',
+      expanded: effectiveStore === 'both'
     });
 
   } catch (e) {
