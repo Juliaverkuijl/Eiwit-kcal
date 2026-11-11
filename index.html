@@ -98,6 +98,10 @@ body{background:#f3f6f5;padding-bottom:76px}.top h1{font-size:25px}.nav{position
 #day #kcalRemaining{color:#c62828!important;background:transparent!important;background-color:transparent!important;box-shadow:none!important;font-weight:800!important}
 #day.kcal-goal-met #kcalRemaining{color:#14804a!important}
 #day.kcal-goal-met .kcalProgress .fill{background:#14804a!important}
+#day.protein-overlimit #proteinBig{color:#c62828!important}
+#day:not(.protein-overlimit) #proteinBig{color:#203332!important}
+#day:not(.kcal-goal-met) #kcalBig{color:#c62828!important}
+#day.kcal-goal-met #kcalBig{color:#14804a!important}
 #day #proteinRemaining::selection,#day #kcalRemaining::selection{background:#f4c8c8}
 #day>details{margin-top:18px;border-top:1px solid #e3ede7;padding-top:10px}
 #day>details>summary{font-size:13px;font-weight:650;color:#4c7062;cursor:pointer}
