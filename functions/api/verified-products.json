@@ -34,5 +34,83 @@
     "verifiedStorePage": true,
     "dutchMarket": true,
     "dutchLanguage": true
+  },
+  {
+    "id": "ah-bounty-wi54189",
+    "name": "Bounty Melk 5-pack",
+    "brand": "Bounty",
+    "store": "Albert Heijn",
+    "protein": 3.8,
+    "kcal": 487,
+    "fat": 26,
+    "sugar": 48,
+    "carbs": 60,
+    "quantity": "285 g",
+    "portion": {
+      "grams": 28.5,
+      "count": 10,
+      "source": "stuk",
+      "estimated": false
+    },
+    "productUrl": "https://www.ah.nl/producten/product/wi54189/bounty-repen-5x2-pack",
+    "nutritionSource": "Albert Heijn-productpagina (11-11-2026)",
+    "verifiedStorePage": true
+  },
+  {
+    "id": "plus-bounty-645357",
+    "name": "Bounty Melk chocolade kokos repen multipack",
+    "brand": "Bounty",
+    "store": "PLUS",
+    "protein": 3.7,
+    "kcal": 487,
+    "fat": 26,
+    "sugar": 48,
+    "carbs": 59,
+    "quantity": "285 g",
+    "productUrl": "https://www.plus.nl/product/bounty-melk-chocolade-kokos-repen-multipack-set-285-g-645357",
+    "nutritionSource": "PLUS-productpagina (11-11-2026)",
+    "verifiedStorePage": true
+  },
+  {
+    "id": "plus-bounty-425665",
+    "name": "Bounty Melk chocolade kokos repen single",
+    "brand": "Bounty",
+    "store": "PLUS",
+    "protein": 3.8,
+    "kcal": 487,
+    "fat": 26,
+    "sugar": 48,
+    "carbs": 59,
+    "quantity": "57 g",
+    "portion": {
+      "grams": 28.5,
+      "count": 2,
+      "source": "stuk",
+      "estimated": false
+    },
+    "productUrl": "https://www.plus.nl/product/bounty-melk-chocolade-kokos-repen-single-wikkel-1-st-425665",
+    "nutritionSource": "PLUS-productpagina (11-11-2026)",
+    "verifiedStorePage": true
+  },
+  {
+    "id": "ah-bounty-wi111638",
+    "name": "Bounty Reep single",
+    "brand": "Bounty",
+    "store": "Albert Heijn",
+    "protein": 3.8,
+    "kcal": 487,
+    "fat": 26,
+    "sugar": 48,
+    "carbs": 59,
+    "quantity": "57 g",
+    "portion": {
+      "grams": 28.5,
+      "count": 2,
+      "source": "stuk",
+      "estimated": false
+    },
+    "productUrl": "https://www.ah.nl/producten/product/wi111638/bounty-single",
+    "nutritionSource": "Albert Heijn-productpagina (11-11-2026)",
+    "verifiedStorePage": true
   }
 ]
