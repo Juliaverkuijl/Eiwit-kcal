@@ -1,0 +1,38 @@
+[
+  {
+    "id": "ah-wi451273",
+    "code": "4001686423189",
+    "name": "Haribo Bananas",
+    "brand": "Haribo",
+    "store": "Albert Heijn",
+    "protein": 2.9,
+    "kcal": 377,
+    "fat": 0.5,
+    "sugar": 77,
+    "carbs": 91,
+    "quantity": "240 g",
+    "productUrl": "https://www.ah.nl/producten/product/wi451273/haribo-bananas",
+    "nutritionSource": "Albert Heijn-productpagina (11-11-2026)",
+    "verifiedStorePage": true,
+    "dutchMarket": true,
+    "dutchLanguage": true
+  },
+  {
+    "id": "jumbo-301702ZK",
+    "code": "4001686423189",
+    "name": "Haribo Bananas 240 g",
+    "brand": "Haribo",
+    "store": "Jumbo",
+    "protein": 2.9,
+    "kcal": 377,
+    "fat": 0.5,
+    "sugar": 77,
+    "carbs": 91,
+    "quantity": "240 g",
+    "productUrl": "https://www.jumbo.com/producten/haribo-bananas-240-g-301702ZK",
+    "nutritionSource": "Jumbo-productpagina (11-11-2026)",
+    "verifiedStorePage": true,
+    "dutchMarket": true,
+    "dutchLanguage": true
+  }
+]

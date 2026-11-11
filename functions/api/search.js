@@ -1,3 +1,4 @@
+import catalog from "./verified-products.json";
 
 const clean = s => String(s || '')
   .toLowerCase()
@@ -103,6 +104,17 @@ export async function onRequestGet({ request }) {
   }
 
   try {
+    const cleanSearch = clean(q).replace(/[^a-z0-9]+/g,' ').trim();
+    const terms = cleanSearch.split(/\s+/).filter(x=>x.length>1 && !['ah','albert','heijn','jumbo','plus','picnic'].includes(x));
+    const matchingCatalog = catalog.filter(p => {
+      const shop = clean(p.store);
+      if(store==='ah' && shop!=='albert heijn')return false;
+      if(store==='jumbo' && shop!=='jumbo')return false;
+      if(store==='picnic' || store==='plus')return false;
+      const hay = clean(p.name+' '+p.brand).replace(/[^a-z0-9]+/g,' ');
+      return terms.length && terms.every(t=>hay.includes(t));
+    });
+    if(matchingCatalog.length) return Response.json({products:matchingCatalog,source:'Geverifieerde productpagina van supermarkt',expanded:false});
     const normalized = clean(q)
       .replace(/[^a-z0-9]+/g, ' ')
       .trim();
