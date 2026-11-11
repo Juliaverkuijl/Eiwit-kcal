@@ -174,7 +174,8 @@ export async function onRequestGet({ request }) {
         'fields',
         'code,product_name,brands,stores,quantity,' +
         'serving_size,product_quantity,product_quantity_unit,' +
-        'image_front_small_url,image_front_url,image_url,nutriments'
+        'image_front_small_url,image_front_url,image_url,nutriments,' +
+        'countries_tags,lang,product_name_nl,product_name_en,product_name_fr'
       );
 
       const r = await fetch(api.toString(), {
@@ -213,6 +214,11 @@ export async function onRequestGet({ request }) {
     const products = raw.map(p => {
       const stores = clean(p.stores);
       const brand = clean(p.brands);
+      const countries = (p.countries_tags || []).map(clean);
+      const dutchMarket = countries.some(c => c === 'en:netherlands' || c === 'en:belgium');
+      const dutchName = String(p.product_name_nl || '').trim();
+      const productLanguage = clean(p.lang);
+      const isDutchLanguage = productLanguage === 'nl' || !!dutchName;
 
       const ah =
         stores.includes('albert heijn') ||
@@ -238,6 +244,9 @@ export async function onRequestGet({ request }) {
         return null;
       }
 
+      // Producten met een expliciet buitenlands land én zonder Nederlandse aansluiting weren.
+      // Onbekende landen zijn niet automatisch buitenlands.
+      if (countries.length && !dutchMarket && !ah && !jumbo && !picnic && !plus) return null;
       const protein = p.nutriments?.proteins_100g == null ? NaN : Number(p.nutriments.proteins_100g);
 
       const kcal = p.nutriments?.['energy-kcal_100g'] == null ? NaN : Number(p.nutriments['energy-kcal_100g']);
@@ -267,7 +276,9 @@ export async function onRequestGet({ request }) {
         sugar: optionalPer100g('sugars_100g'),
         carbs: optionalPer100g('carbohydrates_100g'),
         nutritionSource: 'Open Food Facts (zelfde productrecord)',
-        name: p.product_name || 'Naam onbekend',
+        name: dutchName || p.product_name || 'Naam onbekend',
+        dutchMarket,
+        dutchLanguage: isDutchLanguage,
         brand: p.brands || '',
         store: picnic ? 'Picnic' : plus ? 'PLUS' : ah ? 'Albert Heijn' : jumbo ? 'Jumbo' : 'Open Food Facts',
         protein,
@@ -328,15 +339,33 @@ export async function onRequestGet({ request }) {
       }
       if (/between|btween|b tween/.test(rankingTerm) && /b.?tween|between/.test(name)) n += 50;
       if (p.store !== 'Open Food Facts') n += 12;
+      if (p.dutchMarket) n += 40;
+      if (p.dutchLanguage) n += 25;
       if (p.image) n += 3;
       if (p.fat !== null && p.sugar !== null && p.carbs !== null) n += 2;
       return n;
     };
 
-    unique.sort((a, b) => score(b) - score(a));
+    // Alleen producten waarvan alle belangrijke zoekwoorden in naam/merk voorkomen.
+    // Winkelinformatie is nooit een vervanging voor een overeenkomst met de productnaam.
+    const required = rankingTerm.split(/\s+/).filter(x => x.length >= 2);
+    const matches = p => {
+      const candidate = clean(p.name + ' ' + p.brand).replace(/[^a-z0-9]+/g, ' ');
+      const words = candidate.split(/\s+/);
+      return required.every(t => words.some(w => w === t ||
+        (t.length >= 4 && (w.startsWith(t) || t.startsWith(w) && w.length >= 4))));
+    };
+    // Bij onbekende winkel alleen Nederlandse markt of Nederlandse producttaal toelaten.
+    const relevant = unique.filter(p => matches(p) &&
+      (p.store !== 'Open Food Facts' || p.dutchMarket || p.dutchLanguage));
+    const tier = p => ['Albert Heijn','Jumbo'].includes(p.store) ? 0 :
+      ['Picnic','PLUS'].includes(p.store) ? 1 : 2;
+    relevant.sort((a,b) => tier(a)-tier(b) || score(b)-score(a));
+
+
 
     return Response.json({
-      products: unique,
+      products: relevant,
       source: 'Open Food Facts; winkels op basis van productmetadata, geen officiële assortiment-API',
       expanded: effectiveStore === 'both'
     });
