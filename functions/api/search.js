@@ -109,10 +109,12 @@ export async function onRequestGet({ request }) {
 
     // 'AH pasta', 'pasta AH', 'Albert Heijn pasta' en 'Jumbo pasta'
     // werken ook als de supermarktselector op 'AH en Jumbo' staat.
-    const storeTerms = /\b(albert heijn|ah|jumbo)\b/g;
+    const storeTerms = /\b(albert heijn|ah|jumbo|picnic|plus)\b/g;
     const mentioned = [...normalized.matchAll(storeTerms)].map(m => m[1]);
     const requestedStore = mentioned.some(x => x === 'ah' || x === 'albert heijn') ? 'ah'
-      : mentioned.includes('jumbo') ? 'jumbo' : null;
+      : mentioned.includes('jumbo') ? 'jumbo'
+      : mentioned.includes('picnic') ? 'picnic'
+      : mentioned.includes('plus') ? 'plus' : null;
     const productTerm = normalized.replace(storeTerms, ' ').replace(/\s+/g, ' ').trim();
     const effectiveStore = store === 'both' && requestedStore ? requestedStore : store;
     const rankingTerm = productTerm || normalized;
@@ -129,6 +131,8 @@ export async function onRequestGet({ request }) {
       variants.push(productTerm);
       if (requestedStore === 'ah') variants.push('Albert Heijn ' + productTerm);
       if (requestedStore === 'jumbo') variants.push('Jumbo ' + productTerm);
+        if (requestedStore === 'picnic') variants.push('Picnic ' + productTerm);
+        if (requestedStore === 'plus') variants.push('Plus ' + productTerm);
     }
 
     for (const [pattern, replacement] of aliases) {
@@ -220,20 +224,23 @@ export async function onRequestGet({ request }) {
         stores.includes('jumbo') ||
         brand.includes('jumbo');
 
+      // Winkeltoewijzing alleen wanneer Open Food Facts de winkel/het merk vermeldt.
+      // Geen aannames dat een merk bij een bepaalde supermarkt verkocht wordt.
+      const picnic = /\bpicnic\b/.test(stores) || /\bpicnic\b/.test(brand);
+      const plus = /\bplus\b/.test(stores) || /\bplus\b/.test(brand);
+
       if (
         (effectiveStore === 'ah' && !ah) ||
-        (effectiveStore === 'jumbo' && !jumbo)
+        (effectiveStore === 'jumbo' && !jumbo) ||
+        (effectiveStore === 'picnic' && !picnic) ||
+        (effectiveStore === 'plus' && !plus)
       ) {
         return null;
       }
 
-      const protein = Number(
-        p.nutriments?.proteins_100g
-      );
+      const protein = p.nutriments?.proteins_100g == null ? NaN : Number(p.nutriments.proteins_100g);
 
-      const kcal = Number(
-        p.nutriments?.['energy-kcal_100g']
-      );
+      const kcal = p.nutriments?.['energy-kcal_100g'] == null ? NaN : Number(p.nutriments['energy-kcal_100g']);
 
       if (
         !Number.isFinite(protein) ||
@@ -262,7 +269,7 @@ export async function onRequestGet({ request }) {
         nutritionSource: 'Open Food Facts (zelfde productrecord)',
         name: p.product_name || 'Naam onbekend',
         brand: p.brands || '',
-        store: ah ? 'Albert Heijn' : jumbo ? 'Jumbo' : 'Open Food Facts',
+        store: picnic ? 'Picnic' : plus ? 'PLUS' : ah ? 'Albert Heijn' : jumbo ? 'Jumbo' : 'Open Food Facts',
         protein,
         kcal,
         image:
@@ -294,7 +301,9 @@ export async function onRequestGet({ request }) {
       let n = 0;
       const shop = clean(p.store);
       const matchingStore = (effectiveStore === 'ah' && shop === 'albert heijn') ||
-        (effectiveStore === 'jumbo' && shop === 'jumbo');
+        (effectiveStore === 'jumbo' && shop === 'jumbo') ||
+        (effectiveStore === 'picnic' && shop === 'picnic') ||
+        (effectiveStore === 'plus' && shop === 'plus');
       // Een expliciet merk of supermarktwoord moet relevant zijn, ook als
       // het niet letterlijk in de productnaam staat.
       if (matchingStore) n += 65;
@@ -328,7 +337,7 @@ export async function onRequestGet({ request }) {
 
     return Response.json({
       products: unique,
-      source: 'Open Food Facts; winkeltoewijzing op basis van productmetadata',
+      source: 'Open Food Facts; winkels op basis van productmetadata, geen officiële assortiment-API',
       expanded: effectiveStore === 'both'
     });
 
