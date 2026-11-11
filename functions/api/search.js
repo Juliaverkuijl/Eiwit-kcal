@@ -8,7 +8,7 @@ const shops=[
  {store:'PLUS',domain:'plus.nl',path:/^\/product\//},
 ];
 const allowed=(store,filter)=>filter==='both'||filter==='all'||filter==='off'||filter==='ah'&&store==='Albert Heijn'||filter==='jumbo'&&store==='Jumbo'||filter==='plus'&&store==='PLUS'||filter==='picnic'&&store==='Picnic';
-const numeric=s=>{const n=Number(String(s||'').replace(',','.'));return Number.isFinite(n)&&n>=0?n:null};
+const numeric=s=>{if(s===undefined||s===null||String(s).trim()==='')return null;const n=Number(String(s).replace(',','.'));return Number.isFinite(n)&&n>=0?n:null};
 const plain=s=>String(s||'').replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,' ').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,' ').replace(/<[^>]+>/g,' ').replace(/&nbsp;|&#160;/gi,' ').replace(/&amp;/gi,'&').replace(/\s+/g,' ').trim();
 function parsePage(html,url,store){
  const body=plain(html);const at=body.toLowerCase().indexOf('voedingswaarden');if(at<0)return null;
@@ -26,7 +26,7 @@ function parsePage(html,url,store){
 }
 // Zoek via twee onafhankelijke publieke indexen. Geen officiële assortiment-API.
 const timeout=ms=>AbortSignal.timeout(ms);
-async function discover(q,shop){
+async function discover(q,shop,diagnostics){
  const query='site:'+shop.domain+' '+q;
  const endpoints=[
   ...(shop.store==='Albert Heijn'?[ 'https://www.ah.nl/zoeken/api/products/search?query='+encodeURIComponent(q), 'https://www.ah.nl/zoeken?query='+encodeURIComponent(q) ]:[]),
@@ -36,10 +36,13 @@ async function discover(q,shop){
  ];
  const candidates=[];
  await Promise.all(endpoints.map(async endpoint=>{
+  const diag=diagnostics?{source:endpoint.includes('ah.nl/zoeken/api')?'AH search API':endpoint.includes('ah.nl/zoeken')?'AH search page':endpoint.includes('jumbo.com')?'Jumbo search page':endpoint.includes('bing.com')?'Bing':'Google'}:null;
   try{
    const r=await fetch(endpoint,{headers:{Accept:'text/html, application/rss+xml, application/xml', 'User-Agent':'Mozilla/5.0 (compatible; EiwitKcalSearch/1.0)'},signal:timeout(3500)});
+   if(diag){diag.httpStatus=r.status;diag.contentType=(r.headers.get('content-type')||'').slice(0,80);diagnostics.sources.push(diag)}
    if(!r.ok)return;
    const body=(await r.text()).slice(0,600000);
+   if(diag){diag.responseBytes=body.length;diag.productLinkHints=(body.match(/\/producten\/product\/wi\d+|wi\d+\/|\"productId\"/g)||[]).length}
    // AH zoek-API kan JSON met productkaarten leveren. Haal uitsluitend
    // echte AH-productpagina's op; verzin nooit voedingswaarden uit zoekresultaten.
    if(shop.store==='Albert Heijn' && endpoint.includes('/zoeken/api/products/search')){
@@ -68,7 +71,7 @@ async function discover(q,shop){
     const path=match[0].replace(/\\u002F/gi,'/');
     candidates.push('https://www.'+shop.domain+path);
    }
-  }catch{}
+  }catch(e){if(diag){diag.error=e?.name==='TimeoutError'?'timeout':e?.name==='AbortError'?'aborted':e?.name||'fetch failed';diagnostics.sources.push(diag)}}
  }));
  const urls=new Map();
  for(const raw of candidates){
@@ -80,17 +83,20 @@ async function discover(q,shop){
    }
   }catch{}
  }
+ if(diagnostics)diagnostics.discoveredUrls=urls.size;
  return [...urls.values()].slice(0,8);
 }
-async function liveProducts(q,shop){
- const urls=await discover(q,shop);
+async function liveProducts(q,shop,diagnostics){
+ const urls=await discover(q,shop,diagnostics);
  const results=await Promise.all(urls.map(async url=>{
   try{
    const r=await fetch(url.href,{headers:{Accept:'text/html'},signal:timeout(4000)});
+   if(diagnostics)diagnostics.pages.push({httpStatus:r.status,source:shop.store});
    if(!r.ok)return null;
    const p=parsePage((await r.text()).slice(0,900000),url,shop.store);
+   if(diagnostics){const last=diagnostics.pages[diagnostics.pages.length-1];if(last)last.parsedNutrition=!!p}
    return p&&matches(p,q)?p:null;
-  }catch{return null}
+  }catch(e){if(diagnostics)diagnostics.pages.push({source:shop.store,error:e?.name||'fetch failed'});return null}
  }));
  return results.filter(Boolean);
 }
@@ -98,14 +104,16 @@ function matches(p,q){const terms=words(q).filter(w=>w.length>1&&!['ah','albert'
 export async function onRequestGet({request}){
  const url=new URL(request.url),q=(url.searchParams.get('q')||'').trim(),filter=url.searchParams.get('store')||'both';
  if(q.length<2)return Response.json({products:[],error:'Vul minimaal twee letters in.'},{status:400});
+ const debug=url.searchParams.get('debug')==='1';
+ const diagnostics=debug?{sources:[],pages:[]}:null;
  const known=catalog.filter(p=>allowed(p.store,filter)&&matches(p,q));
  const active=shops.filter(s=>allowed(s.store,filter));
  // Zoek altijd live, ook wanneer de vaste catalogus al resultaten heeft.
  // Variaties per supermarkt parallel, zodat één trage bron niet alles blokkeert.
  const terms=[...new Set([q,words(q).join(' '),...words(q).filter(w=>w.length>=4)])].filter(Boolean).slice(0,3);
- const fresh=(await Promise.all(active.flatMap(shop=>terms.map(term=>liveProducts(term,shop).catch(()=>[]))))).flat().filter(p=>matches(p,q));
+ const fresh=(await Promise.all(active.flatMap(shop=>terms.map(term=>liveProducts(term,shop,diagnostics?{...diagnostics,store:shop.store}:null).catch(()=>[]))))).flat().filter(p=>matches(p,q));
  const unique=new Map();for(const p of [...fresh,...known])unique.set(p.productUrl||p.id,p);
  const rank={'Albert Heijn':0,'Jumbo':1,'PLUS':2,'Picnic':3};
  const products=[...unique.values()].sort((a,b)=>(rank[a.store]??9)-(rank[b.store]??9)||Number(b.verifiedStorePage)-Number(a.verifiedStorePage));
- return Response.json({products,source:'Supermarktproductpagina’s + gecontroleerde catalogus (AH API + productpagina’s; zoekversie 5)',liveChecked:active.map(x=>x.store),note:'Live zoeken is afhankelijk van toegang tot de websites. Niet gevonden betekent niet dat een winkel het product niet verkoopt.'},{headers:{'Cache-Control':'public, max-age=60'}});
+ return Response.json({products,source:'Supermarktproductpagina’s + gecontroleerde catalogus (AH diagnostiek v6)',liveChecked:active.map(x=>x.store),...(debug?{diagnostics:{...diagnostics,knownProducts:known.length,liveProducts:fresh.length}}:{}),note:'Live zoeken is afhankelijk van toegang tot de websites. Niet gevonden betekent niet dat een winkel het product niet verkoopt.'},{headers:{'Cache-Control':debug?'no-store':'public, max-age=60'}});
 }
