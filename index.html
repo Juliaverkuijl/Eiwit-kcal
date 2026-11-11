@@ -538,14 +538,14 @@ renderQuickProducts();
 // Slim zoeken: accenten, typefouten, gedeeltelijke namen en woordvolgorde.
 const smartNormalize=s=>String(s||'').toLocaleLowerCase('nl-NL').normalize('NFD')
  .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
-const smartAliases={oriko:'oreo',oreoo:'oreo',choco:'chocolade',chocopasta:'chocoladepasta',
+const smartAliases={american:'',amerikaans:'',amerikaanse:'',pannenkoek:'pancake',pannenkoeken:'pancake',pancakes:'pancake',oriko:'oreo',oreoo:'oreo',choco:'chocolade',chocopasta:'chocoladepasta',
  yogh:'yoghurt',yogurt:'yoghurt',pannekoek:'pannenkoek',pindakaas:'pindakaas'};
-function smartWords(q){return smartNormalize(q).split(' ').filter(Boolean).map(w=>smartAliases[w]||w)}
+function smartWords(q){return smartNormalize(q).split(' ').filter(Boolean).map(w=>Object.prototype.hasOwnProperty.call(smartAliases,w)?smartAliases[w]:w).filter(Boolean)}
 function smartDistance(a,b){if(Math.abs(a.length-b.length)>3)return 9;const v=Array.from({length:b.length+1},(_,i)=>i);
  for(let i=1;i<=a.length;i++){let prev=v[0];v[0]=i;for(let j=1;j<=b.length;j++){const old=v[j];v[j]=Math.min(v[j]+1,v[j-1]+1,prev+(a[i-1]===b[j-1]?0:1));prev=old}}return v[b.length]}
 function smartScore(p,q){
  const query=smartWords(q).filter(w=>!['ah','jumbo','picnic','plus','albert','heijn'].includes(w));
- const name=smartNormalize(p.name), brand=smartNormalize(p.brand), words=(name+' '+brand).split(' ');
+ const name=smartNormalize(p.name), brand=smartNormalize(p.brand), words=smartWords(name+' '+brand);
  if(!query.length)return 0;
  let score=0;
  for(const w of query){
@@ -577,10 +577,10 @@ async function search(){
  hideSuggestions();const q=$('query').value.trim();
  if(q.length<2){$('status').textContent='Vul minimaal twee letters in.';return}
  const sequence=++smartSearchSequence,store=$('store').value;
- const favMatches=explicitFavs.filter(p=>{const name=String(p.name||'').toLocaleLowerCase('nl-NL');const terms=q.toLocaleLowerCase('nl-NL').split(/\s+/).filter(Boolean);const storeName=String(p.store||'').toLocaleLowerCase('nl-NL');return terms.every(t=>name.includes(t)||String(p.brand||'').toLocaleLowerCase('nl-NL').includes(t))&&(store==='both'||({ah:'albert heijn',jumbo:'jumbo',picnic:'picnic',plus:'plus'}[store]===storeName));});
+ const favMatches=explicitFavs.filter(p=>{const storeName=String(p.store||'').toLocaleLowerCase('nl-NL');return smartScore(p,q)>=20&&(store==='both'||({ah:'albert heijn',jumbo:'jumbo',picnic:'picnic',plus:'plus'}[store]===storeName));});
  $('searchBtn').disabled=true;$('status').textContent=favMatches.length?'⭐ '+favMatches.length+' favoriet(en) gevonden · overige producten zoeken…':'🔎 Producten zoeken…';$('results').replaceChildren();
  try{
-  const variants=favMatches.length?[q]:smartVariants(q);let products=[],errors=[],seen=new Set();
+  const variants=[...new Set([q,smartWords(q).join(' '),...smartVariants(q)])].filter(Boolean);let products=[],errors=[],seen=new Set();
   // Begin met de oorspronkelijke zoekopdracht; probeer alternatieven bij weinig treffers.
   for(let i=0;i<variants.length;i++){
    if(i>0&&products.filter(p=>smartScore(p,q)>=20).length>=12)break;
