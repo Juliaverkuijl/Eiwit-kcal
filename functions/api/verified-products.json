@@ -1,5 +1,29 @@
 [
   {
+    "id": "ah-wi140715",
+    "code": "8710400445524",
+    "name": "AH American pancakes naturel",
+    "brand": "AH",
+    "store": "Albert Heijn",
+    "protein": 5.3,
+    "kcal": 348,
+    "fat": 20,
+    "sugar": 14,
+    "carbs": 35,
+    "quantity": "300 g",
+    "portion": {
+      "grams": 50,
+      "count": 6,
+      "source": "stuk",
+      "estimated": false
+    },
+    "productUrl": "https://www.ah.nl/producten/product/wi140715/american-pancakes-naturel",
+    "nutritionSource": "Albert Heijn-productpagina; per 100 gram, controleer verpakking",
+    "verifiedStorePage": true,
+    "dutchMarket": true,
+    "dutchLanguage": true
+  },
+  {
     "id": "ah-wi451273",
     "code": "4001686423189",
     "name": "Haribo Bananas",
