@@ -92,6 +92,9 @@ body{background:#f3f6f5;padding-bottom:76px}.top h1{font-size:25px}.nav{position
 #day.protein-overlimit .proteinTile{background:#f3f6f5;border-color:#e1e8e5}
 #day.protein-overlimit .proteinTile strong,#day.protein-overlimit .proteinProgress p{color:#ae2924}
 #day.protein-overlimit .proteinProgress .bar .fill{background:#c9322c}
+/* Resterende hoeveelheden altijd duidelijk rood, zonder gele markering. */
+#day #proteinRemaining,#day #kcalRemaining{color:#c62828!important;background:transparent!important;background-color:transparent!important;box-shadow:none!important;font-weight:800!important}
+#day #proteinRemaining::selection,#day #kcalRemaining::selection{background:#f4c8c8}
 #day>details{margin-top:18px;border-top:1px solid #e3ede7;padding-top:10px}
 #day>details>summary{font-size:13px;font-weight:650;color:#4c7062;cursor:pointer}
 @media(max-width:520px){#day{padding:15px 13px}#day .summaryTiles{gap:8px}#day .summaryTile{padding:13px 10px;min-height:106px}#day .summaryTile strong{font-size:28px}#day .summaryTile .tileLabel{font-size:11px}#day .dayHeading h2{font-size:21px}#day .dayHeadingIcon{font-size:20px;padding:8px}}
