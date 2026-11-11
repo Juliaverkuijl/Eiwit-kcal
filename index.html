@@ -513,7 +513,66 @@ $('addMealSelect').onchange=()=>{selectedMeal=$('addMealSelect').value};
 $('copyYesterday').onclick=()=>{ensureDate();const d=new Date(currentDate+'T12:00:00');d.setDate(d.getDate()-1);const date=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');const meal=$('copyMeal').value;const old=(diary[date]?.entries||[]).filter(x=>(x.meal||'overig')===meal);if(!old.length){$('copyStatus').textContent='Geen '+meal+' gevonden op '+date+'.';return}if(!confirm(old.length+' producten van '+date+' kopiëren naar vandaag ('+meal+')?'))return;for(const x of old)entries.push({...x,id:crypto.randomUUID(),meal});persist();totals();mealExpanded[meal]=true;renderMeals();$('copyStatus').textContent=old.length+' producten gekopieerd. Controleer en wijzig zo nodig de hoeveelheden.';};
 async function searchOpenFoodFacts(q){const url='https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=25&fields=code,product_name,brands,nutriments,quantity,image_front_small_url';const r=await fetch(url,{headers:{'Accept':'application/json'}});if(!r.ok)throw Error('Open Food Facts is momenteel niet bereikbaar');const data=await r.json();return (data.products||[]).filter(p=>p.product_name&&Number.isFinite(Number(p.nutriments?.['proteins_100g']))&&Number.isFinite(Number(p.nutriments?.['energy-kcal_100g']))).map(p=>({name:p.product_name,brand:p.brands||'Open Food Facts',store:'Open Food Facts',code:p.code,protein:Number(p.nutriments['proteins_100g']),kcal:Number(p.nutriments['energy-kcal_100g']),quantity:p.quantity||'',sugar:p.nutriments?.['sugars_100g']??null,fat:p.nutriments?.['fat_100g']??null,carbs:p.nutriments?.['carbohydrates_100g']??null,image:p.image_front_small_url||''})).filter(p=>p.protein>=0&&p.kcal>=0)}
 renderQuickProducts();
-async function search(){hideSuggestions();let q=$('query').value.trim();if(q.length<2){$('status').textContent='Vul minimaal twee letters in.';return}$('searchBtn').disabled=true;$('status').textContent='Zoeken…';$('results').replaceChildren();try{let data;if($('store').value==='off'){data={products:await searchOpenFoodFacts(q)}}else{let r=await fetch('/api/search?q='+encodeURIComponent(q)+'&store='+encodeURIComponent($('store').value));data=await r.json();if(!r.ok)throw Error(data.error||'Zoeken mislukt');}$('status').textContent=`${data.products.length} producten gevonden`+(data.expanded?' · ook producten zonder supermarktvermelding getoond':'');rememberSearch(q);data.products.forEach(p=>{let el=document.createElement('div');el.className='result';let img=document.createElement('img');img.alt='Productfoto';if(p.image)img.src=p.image;else img.style.visibility='hidden';let detail=document.createElement('div');detail.className='details';let title=document.createElement('div');title.textContent=`${p.name} · ${p.brand||p.store}${p.code?' · '+p.code:''}`;let info=document.createElement('div');info.className='small';info.textContent=productInfoText(p)[0];detail.append(title,info);if(p.quantity){let pack=document.createElement('div');pack.className='small';pack.textContent=productInfoText(p)[1]||('Verpakkingsinhoud: '+p.quantity);detail.append(pack)}if(p.portion?.grams>0){let line=document.createElement('div');line.className='portion';line.textContent=`Per ${p.portion.source==='portie'?'portie':'stuk'} (${fmt(p.portion.grams)} g): ${fmtProtein(p.protein*p.portion.grams/100)} g eiwit · ${fmt(p.kcal*p.portion.grams/100,0)} kcal`; detail.append(line)}let favBtn=document.createElement('button');favBtn.textContent=explicitFavs.some(x=>productId(x)===productId(p))?'★':'☆';favBtn.className='mutedbtn';favBtn.style.width='auto';favBtn.title='Favoriet aan- of uitzetten';favBtn.dataset.favId=productId(p);favBtn.onclick=()=>toggleFavorite(p);let btn=document.createElement('button');btn.textContent='Kies';btn.onclick=()=>{trackRecent(p);choose(p)};el.append(img,detail,favBtn,btn);$('results').append(el)})}catch(e){$('status').textContent=e.message+(e.message.includes('HTTP 503')?' — Open Food Facts is tijdelijk niet bereikbaar. Probeer later opnieuw.':' — probeer opnieuw of controleer de zoekservice.')}finally{$('searchBtn').disabled=false}}const popular=['B\'tween mueslireep','Hero B\'tween','between reep','ontbijtkoek','ontbijtgranen','ontbijtbiscuit','ontbijtrepen','Danoontje','Almhof yoghurt','yoghurt','kwark','melk','halfvolle melk','volle melk','kaas','jong belegen kaas','brood','volkoren brood','wit brood','beschuit','crackers','rijstwafels','banaan','appel','aardbeien','pasta','spaghetti','rijst','aardappelen','friet','kipfilet','gehakt','ei','eieren','komkommer','tomaat','paprika','wortel','mais','chocolade','koekjes','Sultana','rozijnen','vruchtenhagel','pindakaas','jam','appelmoes','vla','ijs','pizza','pannenkoeken','croissant','muesli','cornflakes','boter','margarine','honing','limonade','sap'];
+
+// Slim zoeken: accenten, typefouten, gedeeltelijke namen en woordvolgorde.
+const smartNormalize=s=>String(s||'').toLocaleLowerCase('nl-NL').normalize('NFD')
+ .replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim().replace(/\s+/g,' ');
+const smartAliases={oriko:'oreo',oreoo:'oreo',choco:'chocolade',chocopasta:'chocoladepasta',
+ yogh:'yoghurt',yogurt:'yoghurt',pannekoek:'pannenkoek',pindakaas:'pindakaas'};
+function smartWords(q){return smartNormalize(q).split(' ').filter(Boolean).map(w=>smartAliases[w]||w)}
+function smartDistance(a,b){if(Math.abs(a.length-b.length)>3)return 9;const v=Array.from({length:b.length+1},(_,i)=>i);
+ for(let i=1;i<=a.length;i++){let prev=v[0];v[0]=i;for(let j=1;j<=b.length;j++){const old=v[j];v[j]=Math.min(v[j]+1,v[j-1]+1,prev+(a[i-1]===b[j-1]?0:1));prev=old}}return v[b.length]}
+function smartScore(p,q){const words=smartWords(q),name=smartNormalize([p.name,p.brand,p.store].join(' '));
+ const parts=name.split(' ');if(!words.length)return 0;let score=0;
+ for(const w of words){if(name===w)score+=80;else if(parts.includes(w))score+=35;
+ else if(name.includes(w))score+=23;else if(parts.some(t=>t.startsWith(w)||w.startsWith(t)&&t.length>=4))score+=14;
+ else if(parts.some(t=>smartDistance(t,w)<=Math.max(1,Math.floor(w.length/4))))score+=8;
+ else score-=22}
+ if(smartNormalize(p.name).startsWith(smartNormalize(q)))score+=22;
+ return score;
+}
+function smartVariants(q){const cleaned=smartNormalize(q),words=smartWords(q);
+ const variants=[q,words.join(' ')];
+ if(words.length>1){variants.push(words.slice().reverse().join(' '));variants.push(words.filter(w=>w.length>3).join(' '));}
+ const swaps={chocoladepasta:'chocopasta',chocopasta:'chocoladepasta',oreo:'or eo'};
+ for(const w of words){if(swaps[w])variants.push(words.map(x=>x===w?swaps[w]:x).join(' '))}
+ return [...new Set(variants.map(v=>v.trim()).filter(v=>v.length>=2))].slice(0,5);
+}
+async function smartFetch(q,store){
+ if(store==='off')return searchOpenFoodFacts(q);
+ const r=await fetch('/api/search?q='+encodeURIComponent(q)+'&store='+encodeURIComponent(store));
+ let data;try{data=await r.json()}catch{throw Error('Zoekservice geeft geen geldig antwoord')}
+ if(!r.ok)throw Error(data.error||'Zoeken mislukt');
+ return data.products||[];
+}
+let smartSearchSequence=0;
+async function search(){
+ hideSuggestions();const q=$('query').value.trim();
+ if(q.length<2){$('status').textContent='Vul minimaal twee letters in.';return}
+ const sequence=++smartSearchSequence,store=$('store').value;
+ $('searchBtn').disabled=true;$('status').textContent='🔎 Producten zoeken…';$('results').replaceChildren();
+ try{
+  const variants=smartVariants(q);let products=[],errors=[],seen=new Set();
+  // Begin met de oorspronkelijke zoekopdracht; probeer alternatieven bij weinig treffers.
+  for(let i=0;i<variants.length;i++){
+   if(i>0&&products.length>=12)break;
+   try{const found=await smartFetch(variants[i],store);
+    if(sequence!==smartSearchSequence)return;
+    for(const p of found){const id=productId(p);if(!seen.has(id)){seen.add(id);products.push(p)}}
+   }catch(e){errors.push(e.message||String(e))}
+  }
+  if(sequence!==smartSearchSequence)return;
+  products.sort((a,b)=>smartScore(b,q)-smartScore(a,q));
+  const data={products:products.slice(0,40)};
+  $('status').textContent=products.length?
+   `${products.length} producten gevonden · beste overeenkomsten bovenaan${variants.length>1?' · ook op vergelijkbare namen gezocht':''}`:
+   `Geen producten gevonden.${errors.length?' Zoekservice mogelijk niet bereikbaar: '+errors[0]: ' Probeer een andere naam of scan de barcode.'}`;
+  rememberSearch(q);
+  data.products.forEach(p=>{let el=document.createElement('div');el.className='result';let img=document.createElement('img');img.alt='Productfoto';if(p.image)img.src=p.image;else img.style.visibility='hidden';let detail=document.createElement('div');detail.className='details';let title=document.createElement('div');title.textContent=`${p.name} · ${p.brand||p.store}${p.code?' · '+p.code:''}`;let info=document.createElement('div');info.className='small';info.textContent=productInfoText(p)[0];detail.append(title,info);if(p.quantity){let pack=document.createElement('div');pack.className='small';pack.textContent=productInfoText(p)[1]||('Verpakkingsinhoud: '+p.quantity);detail.append(pack)}if(p.portion?.grams>0){let line=document.createElement('div');line.className='portion';line.textContent=`Per ${p.portion.source==='portie'?'portie':'stuk'} (${fmt(p.portion.grams)} g): ${fmtProtein(p.protein*p.portion.grams/100)} g eiwit · ${fmt(p.kcal*p.portion.grams/100,0)} kcal`; detail.append(line)}let favBtn=document.createElement('button');favBtn.textContent=explicitFavs.some(x=>productId(x)===productId(p))?'★':'☆';favBtn.className='mutedbtn';favBtn.style.width='auto';favBtn.title='Favoriet aan- of uitzetten';favBtn.dataset.favId=productId(p);favBtn.onclick=()=>toggleFavorite(p);let btn=document.createElement('button');btn.textContent='Kies';btn.onclick=()=>{trackRecent(p);choose(p)};el.append(img,detail,favBtn,btn);$('results').append(el)})
+ }catch(e){if(sequence===smartSearchSequence)$('status').textContent='Zoeken mislukt: '+e.message}
+ finally{if(sequence===smartSearchSequence)$('searchBtn').disabled=false}
+}
+const popular=['B\'tween mueslireep','Hero B\'tween','between reep','ontbijtkoek','ontbijtgranen','ontbijtbiscuit','ontbijtrepen','Danoontje','Almhof yoghurt','yoghurt','kwark','melk','halfvolle melk','volle melk','kaas','jong belegen kaas','brood','volkoren brood','wit brood','beschuit','crackers','rijstwafels','banaan','appel','aardbeien','pasta','spaghetti','rijst','aardappelen','friet','kipfilet','gehakt','ei','eieren','komkommer','tomaat','paprika','wortel','mais','chocolade','koekjes','Sultana','rozijnen','vruchtenhagel','pindakaas','jam','appelmoes','vla','ijs','pizza','pannenkoeken','croissant','muesli','cornflakes','boter','margarine','honing','limonade','sap'];
 const historyKey='eiwitkcal-zoekgeschiedenis';let history=[];try{history=JSON.parse(localStorage.getItem(historyKey)||'[]');if(!Array.isArray(history))history=[]}catch{}
 const norm=s=>String(s).toLocaleLowerCase('nl-NL').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 function rememberSearch(q){history=[q,...history.filter(x=>norm(x)!==norm(q))].slice(0,30);try{localStorage.setItem(historyKey,JSON.stringify(history))}catch{}}
@@ -565,7 +624,7 @@ function loadZXing(){if(window.ZXing?.BrowserMultiFormatReader)return Promise.re
 function foundBarcode(raw){const code=String(raw||'').replace(/\D/g,'');if(!/^\d{8,14}$/.test(code))return false;$('barcodeManual').value=code;stopBarcodeCamera();lookupBarcode();return true}
 async function scanWithZXing(){await loadZXing();scanReader=new ZXing.BrowserMultiFormatReader();scanActive=true;$('scanArea').hidden=false;$('scanMessage').textContent='Richt de camera op de barcode. Houd de verpakking stil en zorg voor voldoende licht.';const video=$('scanVideo');await scanReader.decodeFromVideoDevice(undefined,video,(result,error)=>{if(!scanActive)return;if(result)foundBarcode(result.getText())});}
 $('scanBtn').onclick=async()=>{if(scanActive){stopBarcodeCamera();return}$('status').textContent='Camera openen…';try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera niet beschikbaar in deze browser');if('BarcodeDetector' in window){try{const formats=await BarcodeDetector.getSupportedFormats();const usable=['ean_13','ean_8','upc_a','upc_e'].filter(f=>formats.includes(f));if(usable.length){scanStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}}});$('scanArea').hidden=false;const video=$('scanVideo');video.srcObject=scanStream;await video.play();const detector=new BarcodeDetector({formats:usable});scanActive=true;$('status').textContent='Camera actief. Richt op de barcode.';const loop=async()=>{if(!scanActive)return;try{const codes=await detector.detect(video);if(codes.length&&foundBarcode(codes[0].rawValue))return}catch(e){}if(scanActive)requestAnimationFrame(loop)};requestAnimationFrame(loop);return}}catch(e){stopBarcodeCamera()}}await scanWithZXing();$('status').textContent='Camera actief. Richt op de barcode.'}catch(e){stopBarcodeCamera();$('status').textContent='Scannen lukt niet: '+e.message+'. Gebruik eventueel barcode invoeren.'}};
-$('clearQuery').onclick=()=>{$('query').value='';$('results').replaceChildren();$('status').textContent='';hideSuggestions();$('clearQuery').hidden=true;$('query').focus()};$('searchBtn').onclick=search;$('query').addEventListener('input',()=>{$('results').replaceChildren();$('status').textContent='';$('clearQuery').hidden=!$('query').value;showSuggestions()});$('query').addEventListener('focus',()=>{if($('query').value.trim())showSuggestions();});$('query').addEventListener('blur',()=>setTimeout(hideSuggestions,120));$('query').onkeydown=e=>{if(e.key==='Escape')hideSuggestions();if(e.key==='Enter'){e.preventDefault();search()}};$('store').addEventListener('change',showSuggestions);loadDay();totals();calc();showPage('today');document.addEventListener('visibilitychange',()=>{if(!document.hidden)ensureDate()});setInterval(ensureDate,60000);
+$('clearQuery').onclick=()=>{smartSearchSequence++;$('searchBtn').disabled=false;$('query').value='';$('results').replaceChildren();$('status').textContent='';hideSuggestions();$('clearQuery').hidden=true;$('query').focus()};$('searchBtn').onclick=search;$('query').addEventListener('input',()=>{$('results').replaceChildren();$('status').textContent='';$('clearQuery').hidden=!$('query').value;showSuggestions()});$('query').addEventListener('focus',()=>{if($('query').value.trim())showSuggestions();});$('query').addEventListener('blur',()=>setTimeout(hideSuggestions,120));$('query').onkeydown=e=>{if(e.key==='Escape')hideSuggestions();if(e.key==='Enter'){e.preventDefault();search()}};$('store').addEventListener('change',showSuggestions);loadDay();totals();calc();showPage('today');document.addEventListener('visibilitychange',()=>{if(!document.hidden)ensureDate()});setInterval(ensureDate,60000);
 
 // Cloudflare D1: one-time device pairing. The secret pairing code is NEVER stored on the device.
 window.__juliaSyncInitialized=true;
