@@ -112,5 +112,68 @@
     "productUrl": "https://www.ah.nl/producten/product/wi111638/bounty-single",
     "nutritionSource": "Albert Heijn-productpagina (11-11-2026)",
     "verifiedStorePage": true
+  },
+  {
+    "id": "ah-wi538500",
+    "name": "OaYeah! Pancakes",
+    "brand": "OaYeah!",
+    "store": "Albert Heijn",
+    "protein": 5.4,
+    "kcal": 271,
+    "fat": 12,
+    "sugar": 7.5,
+    "carbs": 33,
+    "quantity": "160 g",
+    "portion": {
+      "grams": 40,
+      "count": 4,
+      "source": "stuk",
+      "estimated": false
+    },
+    "productUrl": "https://www.ah.nl/producten/product/wi538500/pancakes",
+    "nutritionSource": "Albert Heijn-productpagina; controleer etiket",
+    "verifiedStorePage": true
+  },
+  {
+    "id": "jumbo-627299BAK",
+    "name": "Jumbo Naturel Pancakes 6 stuks",
+    "brand": "Jumbo",
+    "store": "Jumbo",
+    "protein": 6.7,
+    "kcal": 296,
+    "fat": 13.7,
+    "sugar": 14.2,
+    "carbs": 36.1,
+    "quantity": "240 g",
+    "portion": {
+      "grams": 40,
+      "count": 6,
+      "source": "stuk",
+      "estimated": false
+    },
+    "productUrl": "https://www.jumbo.com/producten/jumbo-naturel-pancakes-6-stuks-627299BAK",
+    "nutritionSource": "Jumbo-productpagina; controleer etiket",
+    "verifiedStorePage": true
+  },
+  {
+    "id": "jumbo-627296BAK",
+    "name": "Jumbo Banaan Pancakes 4 stuks",
+    "brand": "Jumbo",
+    "store": "Jumbo",
+    "protein": 5.4,
+    "kcal": 264,
+    "fat": 12.8,
+    "sugar": 16.3,
+    "carbs": 30.1,
+    "quantity": "160 g",
+    "portion": {
+      "grams": 40,
+      "count": 4,
+      "source": "stuk",
+      "estimated": false
+    },
+    "productUrl": "https://www.jumbo.com/producten/jumbo-banaan-pancakes-4-stuks-627296BAK",
+    "nutritionSource": "Jumbo-productpagina; controleer etiket",
+    "verifiedStorePage": true
   }
 ]

@@ -44,7 +44,7 @@ export async function onRequestGet({request}){
  if(q.length<2)return Response.json({products:[],error:'Vul minimaal twee letters in.'},{status:400});
  const known=catalog.filter(p=>allowed(p.store,filter)&&matches(p,q));
  const active=shops.filter(s=>allowed(s.store,filter));
- const fresh=(await Promise.all(active.map(s=>liveProducts(q,s)))).flat();
+ const fresh=known.length>=2?[]:(await Promise.all(active.map(s=>liveProducts(q,s)))).flat();
  const unique=new Map();for(const p of [...fresh,...known])unique.set(p.productUrl||p.id,p);
  const products=[...unique.values()].sort((a,b)=>Number(b.verifiedStorePage)-Number(a.verifiedStorePage));
  return Response.json({products,source:'Supermarktproductpagina’s + gecontroleerde catalogus',liveChecked:active.map(x=>x.store),note:'Live zoeken is afhankelijk van toegang tot de websites. Niet gevonden betekent niet dat een winkel het product niet verkoopt.'},{headers:{'Cache-Control':'public, max-age=300'}});
