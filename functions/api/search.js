@@ -38,7 +38,8 @@ async function liveProducts(q,shop){
   try{const r=await fetch(url.href,{headers:{Accept:'text/html'},signal:AbortSignal.timeout(4500)});if(!r.ok)return null;const p=parsePage((await r.text()).slice(0,900000),url,shop.store);return p&&matches(p,q)?p:null}catch{return null}
  })))).filter(Boolean)}catch{return []}
 }
-function matches(p,q){const terms=normalize(q).split(' ').filter(w=>w.length>1&&!['ah','albert','heijn','jumbo','plus','picnic'].includes(w));const hay=normalize(p.name+' '+p.brand);return terms.length>0&&terms.every(t=>hay.includes(t));}
+function queryTerms(q){return normalize(q).split(' ').filter(w=>w.length>1&&!['ah','albert','heijn','jumbo','plus','picnic','american','amerikaanse','amerikaans','naturel','original'].includes(w)).map(w=>({pancake:'pancake',pancakes:'pancake',pannenkoek:'pancake',pannenkoeken:'pancake'}[w]||w));}
+function matches(p,q){const terms=queryTerms(q);const hay=normalize(p.name+' '+p.brand).replace(/pannenkoeken?|pancakes?/g,'pancake');return terms.length>0&&terms.every(t=>hay.includes(t));}
 export async function onRequestGet({request}){
  const url=new URL(request.url),q=(url.searchParams.get('q')||'').trim(),filter=url.searchParams.get('store')||'both';
  if(q.length<2)return Response.json({products:[],error:'Vul minimaal twee letters in.'},{status:400});
