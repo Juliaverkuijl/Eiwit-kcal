@@ -118,7 +118,12 @@ function queryMatches(candidate, query) {
     cWords.some(w => w === t ||
       (t.length >= 4 && w.length >= 4 && (w.startsWith(t) || t.startsWith(w))) ||
       (t.length >= 5 && w.length >= 5 && editDistanceAtMostOne(t, w))) ||
-    (t.length >= 5 && cCompact.includes(t))
+    (t.length >= 5 && (cCompact.includes(t) ||
+      // Samengestelde merknamen: 'redband' tegenover 'Red Brand'.
+      // Alleen een kleine afwijking accepteren bij een volledige merknaam.
+      cWords.some((w, i) => i + 1 < cWords.length &&
+        Math.abs((w + cWords[i + 1]).length - t.length) <= 1 &&
+        editDistanceAtMostOne(t, w + cWords[i + 1]))))
   );
 }
 
