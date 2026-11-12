@@ -27,7 +27,9 @@ export async function onRequestGet({request}){
  const source=approved.find(a=>url.protocol==='https:'&&url.hostname===a.host&&a.pattern.test(url.pathname));
  if(!source)return Response.json({error:'Alleen rechtstreekse productlinks van AH en Jumbo worden ondersteund.'},{status:400});
  url.search='';url.hash='';
- try{const r=await fetch(url.href,{headers:{'Accept':'text/html','User-Agent':'Mozilla/5.0 (compatible; EiwitKcal/1.0)'},signal:AbortSignal.timeout(8000),redirect:'error'});
+ try{const r=await fetch(url.href,{headers:{'Accept':'text/html','User-Agent':'Mozilla/5.0 (compatible; EiwitKcal/1.0)'},signal:AbortSignal.timeout(8000),redirect:'manual'});
+ if(r.status>=300&&r.status<400)throw Error('De supermarkt verwijst door naar een andere pagina; automatisch volgen is om veiligheidsredenen uitgeschakeld.');
+ if(r.status===403||r.status===429)throw Error('De supermarkt blokkeert automatische toegang (HTTP '+r.status+').');
  if(!r.ok)throw Error('Supermarktwebsite antwoordt met '+r.status);
  const contentType=r.headers.get('content-type')||'';if(!contentType.includes('text/html'))throw Error('Geen productpagina ontvangen');
  const html=(await r.text()).slice(0,1200000);const product=extract(html,source.store,url);
