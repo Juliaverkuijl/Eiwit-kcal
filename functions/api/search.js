@@ -90,15 +90,47 @@ function portion(p) {
   return null;
 }
 
+// Zoekwoordvergelijking op basis van naam én merk. Vergelijk ook zonder
+// spaties/streepjes en accepteer kleine typefouten bij langere woorden.
+function compactText(s) {
+  return clean(s).replace(/[^a-z0-9]+/g, ' ').trim();
+}
+function editDistanceAtMostOne(a, b) {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0, j = 0, edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) { i++; j++; continue; }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (b.length > a.length) j++;
+    else { i++; j++; }
+  }
+  return edits + Number(i < a.length || j < b.length) <= 1;
+}
+function queryMatches(candidate, query) {
+  const c = compactText(candidate);
+  const q = compactText(query);
+  if (!q) return false;
+  const cWords = c.split(' ').filter(Boolean);
+  const cCompact = cWords.join('');
+  const qWords = q.split(' ').filter(Boolean);
+  return qWords.every(t =>
+    cWords.some(w => w === t ||
+      (t.length >= 4 && w.length >= 4 && (w.startsWith(t) || t.startsWith(w))) ||
+      (t.length >= 5 && w.length >= 5 && editDistanceAtMostOne(t, w))) ||
+    (t.length >= 5 && cCompact.includes(t))
+  );
+}
+
 export async function onRequestGet({ request }) {
   const u = new URL(request.url);
   const q = (u.searchParams.get('q') || '').trim();
   const store = u.searchParams.get('store') || 'both';
 
-  if (q.length < 2) {
+  if (q.length < 2 || q.length > 120) {
     return Response.json({
       products: [],
-      error: 'Vul minimaal twee letters in.'
+      error: 'Vul een zoekterm in van 2 tot 120 tekens.'
     }, { status: 400 });
   }
 
@@ -119,113 +151,87 @@ export async function onRequestGet({ request }) {
     const productTerm = normalized.replace(storeTerms, ' ').replace(/\s+/g, ' ').trim();
     const effectiveStore = store === 'both' && requestedStore ? requestedStore : store;
     const rankingTerm = productTerm || normalized;
-    const aliases = [
-      [/\b(between|b tween|btween|b twe en)\b/g, "b'tween"],
-      [/\b(between|b tween|btween|b twe en)\b/g, 'hero'],
-      [/\b(reep|repen|mueslireep|mueslirepen)\b/g, 'mueslireep'],
-      [/\b(ontbi|ontbij)\b/g, 'ontbijtkoek'],
-      [/\b(danoon|danontje)\b/g, 'danoontje']
+    // Normaliseer schrijfwijzen zonder de originele zoekterm te verliezen.
+    // Gebruik enkele gerichte verzoeken, niet zeven parallelle zoekopdrachten.
+    const words = rankingTerm.split(/\s+/).filter(Boolean);
+    const variants = [];
+    const add = term => {
+      const t = String(term || '').trim().replace(/\s+/g, ' ');
+      if (t.length >= 2 && !variants.some(v => clean(v) === clean(t))) variants.push(t);
+    };
+    add(q);
+    if (productTerm !== normalized) add(productTerm);
+
+    // Generieke merk-/productcombinaties: probeer de meest specifieke
+    // productwoorden zonder het eerste (of de eerste twee) woord(en).
+    if (words.length >= 3) add(words.slice(1).join(' '));
+    if (words.length >= 4) add(words.slice(2).join(' '));
+
+    // Afwijkende schrijfwijzen en veelvoorkomende afkortingen.
+    const synonyms = [
+      [/\b(redband)\b/g, 'red band'],
+      [/\b(red band)\b/g, 'redband'],
+      [/\b(between|b tween|btween)\b/g, "b'tween"],
+      [/\b(danoon|danontje)\b/g, 'danoontje'],
+      [/\b(ontbi|ontbij)\b/g, 'ontbijtkoek']
     ];
-
-    const variants = [q];
-    if (productTerm && productTerm !== normalized) {
-      variants.push(productTerm);
-      if (requestedStore === 'ah') variants.push('Albert Heijn ' + productTerm);
-      if (requestedStore === 'jumbo') variants.push('Jumbo ' + productTerm);
-        if (requestedStore === 'picnic') variants.push('Picnic ' + productTerm);
-        if (requestedStore === 'plus') variants.push('Plus ' + productTerm);
-        if (requestedStore === 'lidl') variants.push('Lidl ' + productTerm);
+    for (const [pattern, to] of synonyms) {
+      if (pattern.test(normalized)) add(normalized.replace(pattern, to));
     }
+    // Ook bij 'merk product' van twee woorden proberen we het productwoord.
+    // De oorspronkelijke hele zoekopdracht blijft verplicht bij het filteren.
+    if (words.length === 2 && words[1].length >= 5) add(words[1]);
 
-    for (const [pattern, replacement] of aliases) {
-      if (pattern.test(normalized)) {
-        variants.push(
-          normalized.replace(pattern, replacement).trim()
-        );
-      }
-    }
-
-    if (/\b(between|btween|b tween)\b/.test(normalized)) {
-      variants.push(
-        "B'tween",
-        "Hero B'tween",
-        'Hero mueslireep'
-      );
-    }
-
-    if (normalized === 'ontbi' || normalized === 'ontbij') {
-      variants.push('ontbijtkoek');
-    }
-
-    // Extra zoekroutes voor combinaties van merk + productnaam.
-    // Open Food Facts zoekt soms niet goed naar "Redband magische feestmix",
-    // terwijl "magische feestmix" wel resultaten geeft.
-    // De oorspronkelijke woorden blijven vereist bij het filteren hieronder,
-    // zodat een brede zoekroute niet zomaar ongerelateerde producten toont.
-    const productWords = rankingTerm.split(/\s+/).filter(Boolean);
-    if (productWords.length >= 3) {
-      variants.push(productWords.slice(1).join(' '));
-    }
-    if (productWords.length >= 4) {
-      variants.push(productWords.slice(2).join(' '));
-    }
-    // Een zoekopdracht als "Red Band Magische Feestmix" bevat een merk
-    // van twee woorden; ook dan zoeken op de specifieke productnaam.
-    const queries = [
-      ...new Set(variants.map(x => x.trim()).filter(x => x.length >= 3))
-    ].slice(0, 7);
-
+    const queries = variants.slice(0, 5);
     async function lookup(term) {
-      const api = new URL(
-        'https://world.openfoodfacts.org/cgi/search.pl'
-      );
-
+      const api = new URL('https://world.openfoodfacts.org/cgi/search.pl');
       api.searchParams.set('search_terms', term);
       api.searchParams.set('search_simple', '1');
       api.searchParams.set('action', 'process');
       api.searchParams.set('json', '1');
-      api.searchParams.set('page_size', '100');
+      api.searchParams.set('page_size', '70');
+      api.searchParams.set('fields',
+        'code,product_name,brands,stores,quantity,serving_size,' +
+        'product_quantity,product_quantity_unit,image_front_small_url,' +
+        'image_front_url,image_url,nutriments,countries_tags,lang,' +
+        'product_name_nl,product_name_en,product_name_fr');
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5500);
+      try {
+        const r = await fetch(api.toString(), {
+          headers: { 'User-Agent': 'EiwitKcal/1.1 (nutrition lookup)' },
+          signal: controller.signal
+        });
+        if (!r.ok) throw new Error('Voedingsdatabase HTTP ' + r.status);
+        const data = await r.json();
+        if (!Array.isArray(data.products)) throw new Error('Ongeldig antwoord voedingsdatabase');
+        return data.products;
+      } finally { clearTimeout(timer); }
+    }
 
-      api.searchParams.set(
-        'fields',
-        'code,product_name,brands,stores,quantity,' +
-        'serving_size,product_quantity,product_quantity_unit,' +
-        'image_front_small_url,image_front_url,image_url,nutriments,' +
-        'countries_tags,lang,product_name_nl,product_name_en,product_name_fr'
-      );
-
-      const r = await fetch(api.toString(), {
-        headers: {
-          'User-Agent': 'EiwitKcal/1.0 (nutrition lookup)'
-        }
-      });
-
-      if (!r.ok) {
-        throw new Error('Voedingsdatabase HTTP ' + r.status);
+    const raw = [];
+    let successful = 0;
+    const errors = [];
+    // Maximaal twee gelijktijdige verzoeken per ronde; alleen een volgende
+    // ronde als er nog geen goede kandidaat is. Eén fout blokkeert de rest niet.
+    for (let i = 0; i < queries.length; i += 2) {
+      const batch = await Promise.allSettled(queries.slice(i, i + 2).map(lookup));
+      for (const result of batch) {
+        if (result.status === 'fulfilled') {
+          successful++;
+          raw.push(...result.value);
+        } else errors.push(String(result.reason?.message || result.reason));
       }
-
-      const data = await r.json();
-      return data.products || [];
+      // Stop zodra er relevante productnamen gevonden zijn. Dit voorkomt
+      // onnodige verzoeken naar de externe database.
+      if (raw.some(p => {
+        const label = compactText([p.product_name_nl, p.product_name, p.brands].filter(Boolean).join(' '));
+        return queryMatches(label, rankingTerm) &&
+          Number.isFinite(Number(p.nutriments?.proteins_100g)) &&
+          Number.isFinite(Number(p.nutriments?.['energy-kcal_100g']));
+      })) break;
     }
-
-    const batches = await Promise.allSettled(
-      queries.map(lookup)
-    );
-
-    // NIEUW: toon de daadwerkelijke fout bij mislukte verzoeken.
-    if (!batches.some(x => x.status === 'fulfilled')) {
-      const errors = batches
-        .filter(x => x.status === 'rejected')
-        .map(x => String(x.reason?.message || x.reason));
-
-      throw new Error(
-        errors.join(' | ') || 'Onbekende fout'
-      );
-    }
-
-    const raw = batches.flatMap(
-      x => x.status === 'fulfilled' ? x.value : []
-    );
+    if (!successful) throw new Error(errors[0] || 'Voedingsdatabase niet bereikbaar');
 
     const products = raw.map(p => {
       const stores = clean(p.stores);
@@ -332,7 +338,8 @@ export async function onRequestGet({ request }) {
       const matchingStore = (effectiveStore === 'ah' && shop === 'albert heijn') ||
         (effectiveStore === 'jumbo' && shop === 'jumbo') ||
         (effectiveStore === 'picnic' && shop === 'picnic') ||
-        (effectiveStore === 'plus' && shop === 'plus');
+        (effectiveStore === 'plus' && shop === 'plus') ||
+        (effectiveStore === 'lidl' && shop === 'lidl');
       // Een expliciet merk of supermarktwoord moet relevant zijn, ook als
       // het niet letterlijk in de productnaam staat.
       if (matchingStore) n += 65;
@@ -366,26 +373,18 @@ export async function onRequestGet({ request }) {
 
     // Alleen producten waarvan alle belangrijke zoekwoorden in naam/merk voorkomen.
     // Winkelinformatie is nooit een vervanging voor een overeenkomst met de productnaam.
-    const required = rankingTerm.split(/\s+/).filter(x => x.length >= 2);
-    const matches = p => {
-      const candidate = clean(p.name + ' ' + p.brand).replace(/[^a-z0-9]+/g, ' ');
-      const words = candidate.split(/\s+/);
-      const compact = candidate.replace(/\s+/g, '');
-      return required.every(t => words.some(w => w === t ||
-        (t.length >= 4 && (w.startsWith(t) || t.startsWith(w) && w.length >= 4))) ||
-        (t.length >= 5 && compact.includes(t)));
-    };
+    const matches = p => queryMatches(p.name + ' ' + p.brand, rankingTerm);
     // Bij onbekende winkel alleen Nederlandse markt of Nederlandse producttaal toelaten.
     const relevant = unique.filter(p => matches(p) &&
       (p.store !== 'Open Food Facts' || p.dutchMarket || p.dutchLanguage));
     const tier = p => ['Albert Heijn','Jumbo'].includes(p.store) ? 0 :
       ['Picnic','PLUS','Lidl'].includes(p.store) ? 1 : 2;
-    relevant.sort((a,b) => tier(a)-tier(b) || score(b)-score(a));
+    relevant.sort((a,b) => score(b)-score(a) || tier(a)-tier(b));
 
 
 
     return Response.json({
-      products: relevant,
+      products: relevant.slice(0, 80),
       source: 'Open Food Facts; winkels op basis van productmetadata, geen officiële assortiment-API',
       expanded: effectiveStore === 'both'
     });
