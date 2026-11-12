@@ -823,9 +823,24 @@ async function search(){
   products=[...favMatches,...products.filter(p=>!favMatches.some(f=>productId(f)===productId(p)))];
   products.sort((a,b)=>Number(favMatches.some(f=>productId(f)===productId(b)))-Number(favMatches.some(f=>productId(f)===productId(a)))||Number(!!b.verifiedStorePage)-Number(!!a.verifiedStorePage)||smartStorePriority(a)-smartStorePriority(b)||Number(!!b.dutchMarket)-Number(!!a.dutchMarket)||Number(!!b.dutchLanguage)-Number(!!a.dutchLanguage)||smartScore(b,q)-smartScore(a,q));
   const data={products:products.slice(0,40)};
-  $('status').textContent=products.length?
-   `${products.length} producten gevonden${favMatches.length?' · ⭐ favorieten bovenaan':''}${products.length<2?" · minder dan 2 gecontroleerde resultaten; plak eventueel een AH- of Jumbo-productlink":""} · favorieten en gecontroleerde supermarktproducten${variants.length>1?' · ook op vergelijkbare namen gezocht':''}`:
-   `Geen producten gevonden via de beschikbare bronnen. Zoek opnieuw of plak een productlink.${errors.length?' Zoekservice mogelijk niet bereikbaar: '+errors[0]: ' Probeer een andere naam of scan de barcode.'}`;
+  const searchStatus=$('status');
+  if(products.length){
+    searchStatus.textContent=`${products.length} producten gevonden${favMatches.length?' · ⭐ favorieten bovenaan':''}${products.length<2?' · minder dan 2 gecontroleerde resultaten; plak eventueel een productlink':''} · favorieten en gecontroleerde supermarktproducten${variants.length>1?' · ook op vergelijkbare namen gezocht':''}`;
+    searchStatus.style.cssText='';
+  }else{
+    // Geen resultaat is niet hetzelfde als een niet-bereikbare zoekservice.
+    const unavailable=errors.length>0;
+    searchStatus.replaceChildren();
+    const heading=document.createElement('strong');
+    heading.textContent=unavailable?'⚠️ Zoeken is niet gelukt':'🔎 Product niet gevonden';
+    heading.style.cssText='display:block;font-size:1.13rem;margin-bottom:6px';
+    const detail=document.createElement('span');
+    detail.textContent=unavailable
+      ?'De voedingsdatabase is momenteel niet bereikbaar. Probeer het later opnieuw of zoek via de supermarktlinks hieronder.'
+      :'We konden geen product vinden dat overeenkomt met je zoekopdracht. Controleer de naam, scan de barcode of gebruik een supermarktlink hieronder.';
+    searchStatus.append(heading,detail);
+    searchStatus.style.cssText='display:block;padding:14px 16px;margin:12px 0;border-radius:12px;border:1px solid #e5a3a3;background:#fff3f3;color:#8b2020;line-height:1.5';
+  }
   rememberSearch(q);
   $('results').replaceChildren();
   // Geen verzonnen producten of voedingswaarden: bied directe supermarktzoeklinks.
