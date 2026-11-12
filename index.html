@@ -846,12 +846,13 @@ async function search(){
   // Geen verzonnen producten of voedingswaarden: bied directe supermarktzoeklinks.
   if(!data.products.length){
    const help=document.createElement('div');help.className='result';help.style.display='block';
-   const intro=document.createElement('strong');intro.textContent='Zoek verder bij de supermarkt';help.append(intro);
+   const intro=document.createElement('strong');intro.textContent='Zoek verder bij de supermarkt';intro.style.cssText='display:block;margin-bottom:12px;font-size:1rem';help.append(intro);
+   const linkRow=document.createElement('div');linkRow.style.cssText='display:flex;flex-wrap:wrap;gap:9px;align-items:center';help.append(linkRow);
 
    const links=[['Albert Heijn','https://www.ah.nl/zoeken?query='],['Jumbo','https://www.jumbo.com/zoeken?searchTerms='],['PLUS','https://www.plus.nl/zoeken?query='],['Picnic','https://www.google.com/search?q=site%3Apicnic.app%20'],['Lidl','https://www.lidl.nl/q/search?q=']];
    for(const [name,base] of links){
     if(store!=='both'&&store!=='all'&&store!=='off'&&({ah:'Albert Heijn',jumbo:'Jumbo',plus:'PLUS',picnic:'Picnic',lidl:'Lidl'}[store]!==name))continue;
-    const a=document.createElement('a');a.href=base+encodeURIComponent(q);a.target='_blank';a.rel='noopener noreferrer';a.textContent='Zoek bij '+name;a.className='small';a.style.cssText='display:inline-block;margin:6px 12px 4px 0;text-decoration:underline';help.append(a);
+    const a=document.createElement('a');a.href=base+encodeURIComponent(q);a.target='_blank';a.rel='noopener noreferrer';a.textContent='Zoek bij '+name;a.className='small';a.style.cssText='display:inline-flex;align-items:center;padding:9px 13px;border:1px solid #cbded9;border-radius:9px;background:#f4faf8;color:#17675e;text-decoration:none;font-weight:650;white-space:nowrap';linkRow.append(a);
    }
    $('results').append(help);
   }
