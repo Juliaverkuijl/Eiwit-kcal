@@ -109,12 +109,13 @@ export async function onRequestGet({ request }) {
 
     // 'AH pasta', 'pasta AH', 'Albert Heijn pasta' en 'Jumbo pasta'
     // werken ook als de supermarktselector op 'AH en Jumbo' staat.
-    const storeTerms = /\b(albert heijn|ah|jumbo|picnic|plus)\b/g;
+    const storeTerms = /\b(albert heijn|ah|jumbo|picnic|plus|lidl)\b/g;
     const mentioned = [...normalized.matchAll(storeTerms)].map(m => m[1]);
     const requestedStore = mentioned.some(x => x === 'ah' || x === 'albert heijn') ? 'ah'
       : mentioned.includes('jumbo') ? 'jumbo'
       : mentioned.includes('picnic') ? 'picnic'
-      : mentioned.includes('plus') ? 'plus' : null;
+      : mentioned.includes('plus') ? 'plus'
+      : mentioned.includes('lidl') ? 'lidl' : null;
     const productTerm = normalized.replace(storeTerms, ' ').replace(/\s+/g, ' ').trim();
     const effectiveStore = store === 'both' && requestedStore ? requestedStore : store;
     const rankingTerm = productTerm || normalized;
@@ -133,6 +134,7 @@ export async function onRequestGet({ request }) {
       if (requestedStore === 'jumbo') variants.push('Jumbo ' + productTerm);
         if (requestedStore === 'picnic') variants.push('Picnic ' + productTerm);
         if (requestedStore === 'plus') variants.push('Plus ' + productTerm);
+        if (requestedStore === 'lidl') variants.push('Lidl ' + productTerm);
     }
 
     for (const [pattern, replacement] of aliases) {
@@ -155,9 +157,23 @@ export async function onRequestGet({ request }) {
       variants.push('ontbijtkoek');
     }
 
+    // Extra zoekroutes voor combinaties van merk + productnaam.
+    // Open Food Facts zoekt soms niet goed naar "Redband magische feestmix",
+    // terwijl "magische feestmix" wel resultaten geeft.
+    // De oorspronkelijke woorden blijven vereist bij het filteren hieronder,
+    // zodat een brede zoekroute niet zomaar ongerelateerde producten toont.
+    const productWords = rankingTerm.split(/\s+/).filter(Boolean);
+    if (productWords.length >= 3) {
+      variants.push(productWords.slice(1).join(' '));
+    }
+    if (productWords.length >= 4) {
+      variants.push(productWords.slice(2).join(' '));
+    }
+    // Een zoekopdracht als "Red Band Magische Feestmix" bevat een merk
+    // van twee woorden; ook dan zoeken op de specifieke productnaam.
     const queries = [
-      ...new Set(variants.map(x => x.trim()).filter(Boolean))
-    ].slice(0, 5);
+      ...new Set(variants.map(x => x.trim()).filter(x => x.length >= 3))
+    ].slice(0, 7);
 
     async function lookup(term) {
       const api = new URL(
@@ -234,19 +250,21 @@ export async function onRequestGet({ request }) {
       // Geen aannames dat een merk bij een bepaalde supermarkt verkocht wordt.
       const picnic = /\bpicnic\b/.test(stores) || /\bpicnic\b/.test(brand);
       const plus = /\bplus\b/.test(stores) || /\bplus\b/.test(brand);
+      const lidl = /\blidl\b/.test(stores) || /\blidl\b/.test(brand);
 
       if (
         (effectiveStore === 'ah' && !ah) ||
         (effectiveStore === 'jumbo' && !jumbo) ||
         (effectiveStore === 'picnic' && !picnic) ||
-        (effectiveStore === 'plus' && !plus)
+        (effectiveStore === 'plus' && !plus) ||
+        (effectiveStore === 'lidl' && !lidl)
       ) {
         return null;
       }
 
       // Producten met een expliciet buitenlands land én zonder Nederlandse aansluiting weren.
       // Onbekende landen zijn niet automatisch buitenlands.
-      if (countries.length && !dutchMarket && !ah && !jumbo && !picnic && !plus) return null;
+      if (countries.length && !dutchMarket && !ah && !jumbo && !picnic && !plus && !lidl) return null;
       const protein = p.nutriments?.proteins_100g == null ? NaN : Number(p.nutriments.proteins_100g);
 
       const kcal = p.nutriments?.['energy-kcal_100g'] == null ? NaN : Number(p.nutriments['energy-kcal_100g']);
@@ -280,7 +298,7 @@ export async function onRequestGet({ request }) {
         dutchMarket,
         dutchLanguage: isDutchLanguage,
         brand: p.brands || '',
-        store: picnic ? 'Picnic' : plus ? 'PLUS' : ah ? 'Albert Heijn' : jumbo ? 'Jumbo' : 'Open Food Facts',
+        store: lidl ? 'Lidl' : picnic ? 'Picnic' : plus ? 'PLUS' : ah ? 'Albert Heijn' : jumbo ? 'Jumbo' : 'Open Food Facts',
         protein,
         kcal,
         image:
@@ -352,14 +370,16 @@ export async function onRequestGet({ request }) {
     const matches = p => {
       const candidate = clean(p.name + ' ' + p.brand).replace(/[^a-z0-9]+/g, ' ');
       const words = candidate.split(/\s+/);
+      const compact = candidate.replace(/\s+/g, '');
       return required.every(t => words.some(w => w === t ||
-        (t.length >= 4 && (w.startsWith(t) || t.startsWith(w) && w.length >= 4))));
+        (t.length >= 4 && (w.startsWith(t) || t.startsWith(w) && w.length >= 4))) ||
+        (t.length >= 5 && compact.includes(t)));
     };
     // Bij onbekende winkel alleen Nederlandse markt of Nederlandse producttaal toelaten.
     const relevant = unique.filter(p => matches(p) &&
       (p.store !== 'Open Food Facts' || p.dutchMarket || p.dutchLanguage));
     const tier = p => ['Albert Heijn','Jumbo'].includes(p.store) ? 0 :
-      ['Picnic','PLUS'].includes(p.store) ? 1 : 2;
+      ['Picnic','PLUS','Lidl'].includes(p.store) ? 1 : 2;
     relevant.sort((a,b) => tier(a)-tier(b) || score(b)-score(a));
 
 
