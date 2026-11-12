@@ -127,277 +127,166 @@ function queryMatches(candidate, query) {
   );
 }
 
-export async function onRequestGet({ request }) {
-  const u = new URL(request.url);
-  const q = (u.searchParams.get('q') || '').trim();
-  const store = u.searchParams.get('store') || 'both';
 
-  if (q.length < 2 || q.length > 120) {
-    return Response.json({
-      products: [],
-      error: 'Vul een zoekterm in van 2 tot 120 tekens.'
-    }, { status: 400 });
+// Normalisatie en zoekstrategie zijn generiek: geen product-specifieke uitzonderingen.
+const norm = s => clean(s).replace(/&/g, ' en ').replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim();
+const compact = s => norm(s).replace(/\s/g, '');
+const words = s => norm(s).split(' ').filter(Boolean);
+const STORE_RE = /\b(albert heijn|ah|jumbo|picnic|plus|lidl)\b/g;
+const STORE_NAME = {ah:'Albert Heijn',jumbo:'Jumbo',picnic:'Picnic',plus:'PLUS',lidl:'Lidl'};
+const STOP = new Set(['de','het','een','en','van','met','voor','per','in','op','a','the']);
+const json = (obj, status=200) => Response.json(obj, {status,headers:{'Cache-Control':'no-store'}});
+
+function distance(a,b,max=2) {
+  if (Math.abs(a.length-b.length)>max) return max+1;
+  let prev=Array.from({length:b.length+1},(_,i)=>i);
+  for(let i=1;i<=a.length;i++){
+    const next=[i]; let best=i;
+    for(let j=1;j<=b.length;j++){
+      const v=Math.min(prev[j]+1,next[j-1]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+      next.push(v); best=Math.min(best,v);
+    }
+    if(best>max)return max+1;
+    prev=next;
   }
-
-  try {
-    const normalized = clean(q)
-      .replace(/[^a-z0-9]+/g, ' ')
-      .trim();
-
-    // 'AH pasta', 'pasta AH', 'Albert Heijn pasta' en 'Jumbo pasta'
-    // werken ook als de supermarktselector op 'AH en Jumbo' staat.
-    const storeTerms = /\b(albert heijn|ah|jumbo|picnic|plus|lidl)\b/g;
-    const mentioned = [...normalized.matchAll(storeTerms)].map(m => m[1]);
-    const requestedStore = mentioned.some(x => x === 'ah' || x === 'albert heijn') ? 'ah'
-      : mentioned.includes('jumbo') ? 'jumbo'
-      : mentioned.includes('picnic') ? 'picnic'
-      : mentioned.includes('plus') ? 'plus'
-      : mentioned.includes('lidl') ? 'lidl' : null;
-    const productTerm = normalized.replace(storeTerms, ' ').replace(/\s+/g, ' ').trim();
-    const effectiveStore = store === 'both' && requestedStore ? requestedStore : store;
-    const rankingTerm = productTerm || normalized;
-    // Normaliseer schrijfwijzen zonder de originele zoekterm te verliezen.
-    // Gebruik enkele gerichte verzoeken, niet zeven parallelle zoekopdrachten.
-    const words = rankingTerm.split(/\s+/).filter(Boolean);
-    const variants = [];
-    const add = term => {
-      const t = String(term || '').trim().replace(/\s+/g, ' ');
-      if (t.length >= 2 && !variants.some(v => clean(v) === clean(t))) variants.push(t);
-    };
-    add(q);
-    if (productTerm !== normalized) add(productTerm);
-
-    // Generieke merk-/productcombinaties: probeer de meest specifieke
-    // productwoorden zonder het eerste (of de eerste twee) woord(en).
-    if (words.length >= 3) add(words.slice(1).join(' '));
-    if (words.length >= 4) add(words.slice(2).join(' '));
-
-    // Afwijkende schrijfwijzen en veelvoorkomende afkortingen.
-    const synonyms = [
-      [/\b(redband)\b/g, 'red band'],
-      [/\b(red band)\b/g, 'redband'],
-      [/\b(between|b tween|btween)\b/g, "b'tween"],
-      [/\b(danoon|danontje)\b/g, 'danoontje'],
-      [/\b(ontbi|ontbij)\b/g, 'ontbijtkoek']
-    ];
-    for (const [pattern, to] of synonyms) {
-      if (pattern.test(normalized)) add(normalized.replace(pattern, to));
-    }
-    // Ook bij 'merk product' van twee woorden proberen we het productwoord.
-    // De oorspronkelijke hele zoekopdracht blijft verplicht bij het filteren.
-    if (words.length === 2 && words[1].length >= 5) add(words[1]);
-
-    const queries = variants.slice(0, 5);
-    async function lookup(term) {
-      const api = new URL('https://world.openfoodfacts.org/cgi/search.pl');
-      api.searchParams.set('search_terms', term);
-      api.searchParams.set('search_simple', '1');
-      api.searchParams.set('action', 'process');
-      api.searchParams.set('json', '1');
-      api.searchParams.set('page_size', '70');
-      api.searchParams.set('fields',
-        'code,product_name,brands,stores,quantity,serving_size,' +
-        'product_quantity,product_quantity_unit,image_front_small_url,' +
-        'image_front_url,image_url,nutriments,countries_tags,lang,' +
-        'product_name_nl,product_name_en,product_name_fr');
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 5500);
-      try {
-        const r = await fetch(api.toString(), {
-          headers: { 'User-Agent': 'EiwitKcal/1.1 (nutrition lookup)' },
-          signal: controller.signal
-        });
-        if (!r.ok) throw new Error('Voedingsdatabase HTTP ' + r.status);
-        const data = await r.json();
-        if (!Array.isArray(data.products)) throw new Error('Ongeldig antwoord voedingsdatabase');
-        return data.products;
-      } finally { clearTimeout(timer); }
-    }
-
-    const raw = [];
-    let successful = 0;
-    const errors = [];
-    // Maximaal twee gelijktijdige verzoeken per ronde; alleen een volgende
-    // ronde als er nog geen goede kandidaat is. Eén fout blokkeert de rest niet.
-    for (let i = 0; i < queries.length; i += 2) {
-      const batch = await Promise.allSettled(queries.slice(i, i + 2).map(lookup));
-      for (const result of batch) {
-        if (result.status === 'fulfilled') {
-          successful++;
-          raw.push(...result.value);
-        } else errors.push(String(result.reason?.message || result.reason));
-      }
-      // Stop zodra er relevante productnamen gevonden zijn. Dit voorkomt
-      // onnodige verzoeken naar de externe database.
-      if (raw.some(p => {
-        const label = compactText([p.product_name_nl, p.product_name, p.brands].filter(Boolean).join(' '));
-        return queryMatches(label, rankingTerm) &&
-          Number.isFinite(Number(p.nutriments?.proteins_100g)) &&
-          Number.isFinite(Number(p.nutriments?.['energy-kcal_100g']));
-      })) break;
-    }
-    if (!successful) throw new Error(errors[0] || 'Voedingsdatabase niet bereikbaar');
-
-    const products = raw.map(p => {
-      const stores = clean(p.stores);
-      const brand = clean(p.brands);
-      const countries = (p.countries_tags || []).map(clean);
-      const dutchMarket = countries.some(c => c === 'en:netherlands' || c === 'en:belgium');
-      const dutchName = String(p.product_name_nl || '').trim();
-      const productLanguage = clean(p.lang);
-      const isDutchLanguage = productLanguage === 'nl' || !!dutchName;
-
-      const ah =
-        stores.includes('albert heijn') ||
-        stores.includes('ah ') ||
-        brand.includes('albert heijn') ||
-        brand === 'ah';
-
-      const jumbo =
-        stores.includes('jumbo') ||
-        brand.includes('jumbo');
-
-      // Winkeltoewijzing alleen wanneer Open Food Facts de winkel/het merk vermeldt.
-      // Geen aannames dat een merk bij een bepaalde supermarkt verkocht wordt.
-      const picnic = /\bpicnic\b/.test(stores) || /\bpicnic\b/.test(brand);
-      const plus = /\bplus\b/.test(stores) || /\bplus\b/.test(brand);
-      const lidl = /\blidl\b/.test(stores) || /\blidl\b/.test(brand);
-
-      if (
-        (effectiveStore === 'ah' && !ah) ||
-        (effectiveStore === 'jumbo' && !jumbo) ||
-        (effectiveStore === 'picnic' && !picnic) ||
-        (effectiveStore === 'plus' && !plus) ||
-        (effectiveStore === 'lidl' && !lidl)
-      ) {
-        return null;
-      }
-
-      // Producten met een expliciet buitenlands land én zonder Nederlandse aansluiting weren.
-      // Onbekende landen zijn niet automatisch buitenlands.
-      if (countries.length && !dutchMarket && !ah && !jumbo && !picnic && !plus && !lidl) return null;
-      const protein = p.nutriments?.proteins_100g == null ? NaN : Number(p.nutriments.proteins_100g);
-
-      const kcal = p.nutriments?.['energy-kcal_100g'] == null ? NaN : Number(p.nutriments['energy-kcal_100g']);
-
-      if (
-        !Number.isFinite(protein) ||
-        !Number.isFinite(kcal) ||
-        protein < 0 ||
-        kcal < 0
-      ) {
-        return null;
-      }
-
-      // Gebruik uitsluitend waarden van DEZELFDE Open Food Facts-productrecord.
-      // Ontbrekende waarden blijven null, nooit 0.
-      const optionalPer100g = key => {
-        const value = p.nutriments?.[key];
-        if (value === undefined || value === null || value === '') return null;
-        const n = Number(value);
-        return Number.isFinite(n) && n >= 0 ? n : null;
-      };
-
-      return {
-        id: p.code,
-        code: p.code,
-        fat: optionalPer100g('fat_100g'),
-        sugar: optionalPer100g('sugars_100g'),
-        carbs: optionalPer100g('carbohydrates_100g'),
-        nutritionSource: 'Open Food Facts (zelfde productrecord)',
-        name: dutchName || p.product_name || 'Naam onbekend',
-        dutchMarket,
-        dutchLanguage: isDutchLanguage,
-        brand: p.brands || '',
-        store: lidl ? 'Lidl' : picnic ? 'Picnic' : plus ? 'PLUS' : ah ? 'Albert Heijn' : jumbo ? 'Jumbo' : 'Open Food Facts',
-        protein,
-        kcal,
-        image:
-          p.image_front_url ||
-          p.image_front_small_url ||
-          p.image_url ||
-          null,
-        quantity: p.quantity || '',
-        portion: portion(p)
-      };
-    }).filter(Boolean);
-
-    const unique = [
-      ...new Map(products.map(p => [p.id, p])).values()
-    ];
-
-    const tokens = rankingTerm
-      .split(' ')
-      .filter(x => x.length > 2);
-
-    // Rangschik op productnaam en producttype, niet alleen op een woord
-    // dat ergens in merk of beschrijving voorkomt.
-    const pastaTypes = /\b(penne|fusilli|spaghetti|macaroni|farfalle|rigatoni|tagliatelle|linguine|lasagnebladen|schelpjes|conchiglie|orzo|tortiglioni|pastaschelpjes)\b/;
-    const pastaRelated = /\b(pesto|saus|sauce|pastasaus|soep|salade|maaltijd|kant.en.klaar|dressing|kruiden|mix|chips|spread)\b/;
-    const score = p => {
-      const name = clean(p.name).replace(/[^a-z0-9]+/g, ' ').trim();
-      const brand = clean(p.brand);
-      const words = name.split(/\s+/);
-      let n = 0;
-      const shop = clean(p.store);
-      const matchingStore = (effectiveStore === 'ah' && shop === 'albert heijn') ||
-        (effectiveStore === 'jumbo' && shop === 'jumbo') ||
-        (effectiveStore === 'picnic' && shop === 'picnic') ||
-        (effectiveStore === 'plus' && shop === 'plus') ||
-        (effectiveStore === 'lidl' && shop === 'lidl');
-      // Een expliciet merk of supermarktwoord moet relevant zijn, ook als
-      // het niet letterlijk in de productnaam staat.
-      if (matchingStore) n += 65;
-      if (requestedStore && matchingStore) n += 65;
-      if (name === rankingTerm) n += 150;
-      if (name.startsWith(rankingTerm + ' ')) n += 85;
-      if (words.includes(rankingTerm)) n += 65;
-      if (name.includes(rankingTerm)) n += 35;
-      if (brand.includes(rankingTerm)) n += 5;
-      for (const token of tokens) {
-        if (words.includes(token)) n += 24;
-        else if (name.includes(token)) n += 10;
-        if (brand.split(/[^a-z0-9]+/).includes(token)) n += 28;
-        else if (brand.includes(token)) n += 14;
-        if (shop.includes(token)) n += 8;
-      }
-      // 'Pasta' moet echte pasta tonen vóór pesto, sauzen en maaltijden.
-      if (rankingTerm === 'pasta' || rankingTerm === 'pastas') {
-        if (pastaTypes.test(name)) n += 90;
-        if (/\b(pasta|deegwaren)\b/.test(name)) n += 45;
-        if (pastaRelated.test(name)) n -= 110;
-      }
-      if (/between|btween|b tween/.test(rankingTerm) && /b.?tween|between/.test(name)) n += 50;
-      if (p.store !== 'Open Food Facts') n += 12;
-      if (p.dutchMarket) n += 40;
-      if (p.dutchLanguage) n += 25;
-      if (p.image) n += 3;
-      if (p.fat !== null && p.sugar !== null && p.carbs !== null) n += 2;
-      return n;
-    };
-
-    // Alleen producten waarvan alle belangrijke zoekwoorden in naam/merk voorkomen.
-    // Winkelinformatie is nooit een vervanging voor een overeenkomst met de productnaam.
-    const matches = p => queryMatches(p.name + ' ' + p.brand, rankingTerm);
-    // Bij onbekende winkel alleen Nederlandse markt of Nederlandse producttaal toelaten.
-    const relevant = unique.filter(p => matches(p) &&
-      (p.store !== 'Open Food Facts' || p.dutchMarket || p.dutchLanguage));
-    const tier = p => ['Albert Heijn','Jumbo'].includes(p.store) ? 0 :
-      ['Picnic','PLUS','Lidl'].includes(p.store) ? 1 : 2;
-    relevant.sort((a,b) => score(b)-score(a) || tier(a)-tier(b));
-
-
-
-    return Response.json({
-      products: relevant.slice(0, 80),
-      source: 'Open Food Facts; winkels op basis van productmetadata, geen officiële assortiment-API',
-      expanded: effectiveStore === 'both'
-    });
-
-  } catch (e) {
-    return Response.json({
-      products: [],
-      error: 'Zoeken niet gelukt: ' + e.message
-    }, { status: 503 });
+  return prev[b.length];
+}
+function tokenMatches(token, candidateTokens, candidateCompact) {
+  if(candidateTokens.includes(token) || (token.length>=5 && candidateCompact.includes(token)))return true;
+  if(token.length<5)return false;
+  // Vergelijk ook aaneengeschreven merkwoorden met twee losse woorden.
+  // Bijvoorbeeld 'redband' versus 'red brand' (redbrand).
+  if(candidateTokens.some((t,i)=>i+1<candidateTokens.length &&
+    Math.abs((t+candidateTokens[i+1]).length-token.length)<=2 &&
+    distance(token,t+candidateTokens[i+1],token.length>=7?2:1)<=(token.length>=7?2:1)))return true;
+  return candidateTokens.some(t => t.length>=4 && (t.startsWith(token) || token.startsWith(t) && Math.min(t.length,token.length)>=5 ||
+    (token.length>=6 && distance(token,t,token.length>=9?2:1)<=(token.length>=9?2:1))));
+}
+function relevance(p, query, store) {
+  const name=norm(p.name), brand=norm(p.brand), all=norm(p.name+' '+p.brand);
+  const allTokens=words(all), joined=compact(all);
+  const tokens=words(query).filter(t=>!STOP.has(t));
+  if(!tokens.length)return -1;
+  const matched=tokens.filter(t=>tokenMatches(t,allTokens,joined)).length;
+  // Minstens alle belangrijke termen. Een klein typefoutje is toegestaan,
+  // maar producten die niet lijken op de zoekopdracht worden nooit toegelaten.
+  if(matched<tokens.length)return -1;
+  let score=matched*28;
+  if(name===query)score+=180;
+  if(name.startsWith(query+' '))score+=95;
+  if(name.includes(query))score+=65;
+  if(joined.includes(compact(query)))score+=55;
+  if(brand && tokens.some(t=>tokenMatches(t,words(brand),compact(brand))))score+=32;
+  if(p.dutchMarket)score+=35;
+  if(p.dutchLanguage)score+=22;
+  if(p.store!=='Open Food Facts')score+=12;
+  if(p.image)score+=3;
+  if(p.fat!=null && p.sugar!=null && p.carbs!=null)score+=2;
+  if(store!=='both' && p.store===STORE_NAME[store])score+=75;
+  // Bij generieke categorieën zoals pasta krijgen echte basisproducten voorrang.
+  if(query==='pasta'||query==='pastas'){
+    if(/\b(penne|fusilli|spaghetti|macaroni|farfalle|rigatoni|tagliatelle|linguine|orzo|pasta)\b/.test(name))score+=55;
+    if(/\b(pesto|saus|sauce|soep|salade|chips|dressing)\b/.test(name))score-=110;
   }
+  return score;
+}
+function mapProduct(p, store) {
+  const st=norm(p.stores), brand=norm(p.brands);
+  const countries=(p.countries_tags||[]).map(clean);
+  const dutchMarket=countries.includes('en:netherlands')||countries.includes('en:belgium');
+  const dutchName=String(p.product_name_nl||'').trim();
+  const dutchLanguage=!!dutchName || clean(p.lang)==='nl';
+  const detected={
+    ah:st.includes('albert heijn')||brand==='ah'||brand.includes('albert heijn'),
+    jumbo:/\bjumbo\b/.test(st+' '+brand),
+    picnic:/\bpicnic\b/.test(st+' '+brand),
+    plus:/\bplus\b/.test(st+' '+brand),
+    lidl:/\blidl\b/.test(st+' '+brand)
+  };
+  if(store!=='both' && !detected[store])return null;
+  if(countries.length&&!dutchMarket&&!Object.values(detected).some(Boolean))return null;
+  const n=p.nutriments||{};
+  const valid=k=>n[k]!==undefined&&n[k]!==null&&n[k]!==''&&Number.isFinite(Number(n[k]))&&Number(n[k])>=0;
+  if(!valid('proteins_100g')||!valid('energy-kcal_100g'))return null;
+  const opt=k=>valid(k)?Number(n[k]):null;
+  const code=String(p.code||'').trim();
+  if(!code)return null;
+  return {
+    id:code,code, name:dutchName||p.product_name||'Naam onbekend',brand:p.brands||'',
+    store: detected.lidl?'Lidl':detected.picnic?'Picnic':detected.plus?'PLUS':detected.ah?'Albert Heijn':detected.jumbo?'Jumbo':'Open Food Facts',
+    protein:Number(n.proteins_100g),kcal:Number(n['energy-kcal_100g']),
+    fat:opt('fat_100g'),sugar:opt('sugars_100g'),carbs:opt('carbohydrates_100g'),
+    nutritionSource:'Open Food Facts (zelfde productrecord)',
+    image:p.image_front_url||p.image_front_small_url||p.image_url||null,
+    quantity:p.quantity||'',portion:portion(p),dutchMarket,dutchLanguage
+  };
+}
+
+function searchVariants(q) {
+  const n=norm(q);
+  const withoutStore=n.replace(STORE_RE,' ').replace(/\s+/g,' ').trim();
+  const tokens=words(withoutStore);
+  const variants=[n];
+  if(withoutStore!==n)variants.push(withoutStore);
+  // Exacte productwoorden leveren vaak meer resultaten op dan merk + product.
+  if(tokens.length>=3)variants.push(tokens.slice(1).join(' '));
+  if(tokens.length>=4)variants.push(tokens.slice(2).join(' '));
+  // Kleine variaties van het begin van de productnaam, zonder hardcoded merken.
+  if(tokens.length>=2)variants.push(tokens.slice(-2).join(' '));
+  // Compacte merknaam hoeft niet bij de bron exact hetzelfde gespeld te zijn.
+  if(tokens.length>=3 && tokens[0].length>=5)variants.push(tokens.slice(1).join(' '));
+  return [...new Set(variants.filter(x=>x.length>=3))].slice(0,5);
+}
+
+async function lookup(term) {
+  const url=new URL('https://world.openfoodfacts.org/cgi/search.pl');
+  for(const [k,v] of Object.entries({search_terms:term,search_simple:'1',action:'process',json:'1',page_size:'80',
+    fields:'code,product_name,brands,stores,quantity,serving_size,image_front_small_url,image_front_url,image_url,nutriments,countries_tags,lang,product_name_nl'}))url.searchParams.set(k,v);
+  const controller=new AbortController();
+  const timer=setTimeout(()=>controller.abort(),6500);
+  try{
+    const res=await fetch(url.toString(),{headers:{'User-Agent':'EiwitKcal/1.0 (nutrition lookup)','Accept':'application/json'},signal:controller.signal});
+    if(!res.ok)throw new Error('HTTP '+res.status);
+    const data=await res.json();
+    if(!Array.isArray(data.products))throw new Error('Ongeldig antwoord van voedingsdatabase');
+    return data.products;
+  }finally{clearTimeout(timer)}
+}
+
+export async function onRequestGet({request}) {
+  const u=new URL(request.url);
+  const q=(u.searchParams.get('q')||'').trim().slice(0,120);
+  const storeRaw=u.searchParams.get('store')||'both';
+  if(q.length<2)return json({products:[],error:'Vul minimaal twee letters in.'},400);
+  const n=norm(q);
+  const storeMatch=[...n.matchAll(STORE_RE)].map(m=>m[1]);
+  const requestedStore=storeMatch.includes('ah')||storeMatch.includes('albert heijn')?'ah':
+    ['jumbo','picnic','plus','lidl'].find(s=>storeMatch.includes(s))||null;
+  const store=(storeRaw==='both'&&requestedStore?requestedStore:storeRaw);
+  const safeStore=['both','ah','jumbo','picnic','plus','lidl'].includes(store)?store:'both';
+  const query=norm(n.replace(STORE_RE,' '))||n;
+  const variants=searchVariants(q);
+  const found=new Map();
+  let successful=0; const errors=[];const attempted=[];
+  // Geen parallelle burst. De eerste treffers kunnen direct stoppen;
+  // een mislukte bronpoging verhindert een volgende niet.
+  for(const term of variants){
+    attempted.push(term);
+    try{
+      const raw=await lookup(term);successful++;
+      for(const r of raw){
+        const p=mapProduct(r,safeStore);
+        if(!p)continue;
+        const rank=relevance(p,query,safeStore);
+        if(rank<0)continue;
+        const old=found.get(p.id);
+        if(!old||rank>old.rank)found.set(p.id,{p,rank});
+      }
+      if(found.size>=12)break;
+    }catch(e){errors.push(String(e?.message||e));}
+  }
+  if(!successful)return json({products:[],error:'Voedingsdatabase tijdelijk niet bereikbaar. Probeer het later opnieuw.',sourceStatus:'unavailable'},503);
+  const products=[...found.values()].sort((a,b)=>b.rank-a.rank).slice(0,80).map(x=>x.p);
+  return json({products,source:'Open Food Facts; winkels op basis van productmetadata, geen officiële assortiment-API',
+    expanded:safeStore==='both',sourceStatus:errors.length?'partial':'ok',searchAttempts:attempted.length});
 }
