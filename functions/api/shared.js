@@ -1,6 +1,6 @@
 const json=(o,status=200)=>new Response(JSON.stringify(o),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 async function sha(s){const bytes=new TextEncoder().encode(s);const hash=await crypto.subtle.digest('SHA-256',bytes);return [...new Uint8Array(hash)].map(x=>x.toString(16).padStart(2,'0')).join('')}
-const KEYS=new Set(['julia-product-favorites-v1','julia-product-recent-v1','julia-favorite-meal-groups-v1','eiwitkcal-vaak-gekozen-v1','eiwitkcal-zoekgeschiedenis','julia-nutrient-product-overrides-v1','julia-preferred-product-barcodes-v1','julia-growth-measurements-v1','julia-analysis-settings-v1','julia-growth-reference-v1']);
+const KEYS=new Set(['julia-nutrient-product-overrides-v1','julia-preferred-product-barcodes-v1','julia-growth-measurements-v1','julia-analysis-settings-v1','julia-growth-reference-v1']);
 export async function onRequest({request,env}){
  if(!env.DB||!env.DIARY_SECRET)return json({error:'Database niet ingesteld'},503);
  const token=(request.headers.get('Authorization')||'').replace(/^Bearer\s+/i,'');if(!/^[a-f0-9]{64}$/.test(token))return json({error:'Niet gekoppeld'},401);
