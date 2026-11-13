@@ -18,5 +18,5 @@ export async function onRequest({request,env,context}){
   if(stmts.length)await env.DB.batch(stmts);if(newItems.length){const job=sendPush(env,hash,{count:newItems.length,opId:newItems[0].opId}).catch(e=>console.log('Push verzending mislukt',String(e)));if(context?.waitUntil)context.waitUntil(job);else await job}return reply({ok:true});
  }
  return reply({error:'Methode niet toegestaan'},405);
- }catch(e){return reply({error:'Databasefout. Controleer of diary_operations bestaat.'},500)}
+ }catch(e){const message=String(e?.message||e||'');console.error('Diary API:',message);if(/exceeded.*(row|read|limit)|daily.*limit|quota/i.test(message))return reply({error:'Cloudflare D1 daglimiet bereikt. Synchronisatie hervat na reset van de limiet.'},503);if(/no such table/i.test(message))return reply({error:'Databasetabel ontbreekt: '+(message.match(/no such table:\s*([\w]+)/i)?.[1]||'onbekend')},503);return reply({error:'Database tijdelijk niet beschikbaar. Probeer later opnieuw.'},503)}
 }

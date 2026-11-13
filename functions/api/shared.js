@@ -7,7 +7,9 @@ export async function onRequest({request,env}){
  try{
  const hash=await sha(env.DIARY_SECRET+':'+token);const device=await env.DB.prepare('SELECT token_hash FROM diary_devices WHERE token_hash=? AND revoked=0 AND expires_at>?').bind(hash,new Date().toISOString()).first();if(!device)return json({error:'Koppeling verlopen'},401);
  if(request.method==='GET'){
-  const result=await env.DB.prepare("SELECT op_id,entry_id,value,seq FROM diary_operations WHERE type='shared' ORDER BY seq ASC LIMIT 10000").all();
+  // Only the newest value per shared key is needed by the existing client.
+  // The previous query fetched up to 10,000 complete history rows on every poll.
+  const result=await env.DB.prepare("SELECT op_id,entry_id,value,seq FROM diary_operations WHERE type='shared' AND seq IN (SELECT MAX(seq) FROM diary_operations WHERE type='shared' GROUP BY entry_id) ORDER BY seq ASC").all();
   return json({ops:(result.results||[]).filter(r=>KEYS.has(r.entry_id)).map(r=>({opId:r.op_id,key:r.entry_id,value:JSON.parse(r.value),seq:r.seq}))});
  }
  if(request.method==='POST'){
@@ -17,5 +19,5 @@ export async function onRequest({request,env}){
   if(stmts.length)await env.DB.batch(stmts);return json({ok:true});
  }
  return json({error:'Methode niet toegestaan'},405);
- }catch(e){return json({error:'Synchronisatiedatabase niet beschikbaar'},500)}
+ }catch(e){const message=String(e?.message||e||'');console.error('Shared API:',message);if(/exceeded.*(row|read|limit)|daily.*limit|quota/i.test(message))return json({error:'Cloudflare D1 daglimiet bereikt. Probeer na de dagelijkse reset opnieuw.'},503);if(/no such table/i.test(message))return json({error:'Databasetabel ontbreekt.'},503);return json({error:'Synchronisatiedatabase tijdelijk niet beschikbaar'},503)}
 }
