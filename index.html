@@ -831,6 +831,16 @@ let explicitFavs=[];let recentProducts=[];
 try{explicitFavs=JSON.parse(localStorage.getItem(explicitFavKey)||'[]');if(!Array.isArray(explicitFavs))explicitFavs=[]}catch{}
 try{recentProducts=JSON.parse(localStorage.getItem(recentProductsKey)||'[]');if(!Array.isArray(recentProducts))recentProducts=[]}catch{}
 // Standaardfavoriet uit de door gebruiker gecontroleerde invoer. Bestaande favorieten blijven intact.
+// Gedeeld standaardproduct via bestaande favorietensynchronisatie.
+const ketchupDefaultProduct={name:'Tomatenketchup',brand:'Albert Heijn',store:'Albert Heijn',protein:1.2,kcal:87,fat:0,sugar:15,carbs:20,nutritionSource:'Door gebruiker gecontroleerde voedingswaarden'};
+const ketchupSeedKey='eiwitkcal-ah-ketchup-standaard-v1';
+if(!localStorage.getItem(ketchupSeedKey)){
+ if(!explicitFavs.some(p=>String(p.name||'').toLowerCase()==='tomatenketchup'&&String(p.store||p.brand||'').toLowerCase().includes('albert heijn'))){
+  explicitFavs=[ketchupDefaultProduct,...explicitFavs].slice(0,80);
+  localStorage.setItem(explicitFavKey,JSON.stringify(explicitFavs));
+ }
+ localStorage.setItem(ketchupSeedKey,'1');
+}
 const picnicDefaultProduct={name:'Picnic Kaas plantaardige plakken',brand:'Picnic',store:'Picnic',quantity:'200 g',protein:0.1,kcal:269,fat:21,sugar:0.1,carbs:19,portion:{grams:25,source:'stuk'},nutritionSource:'Door gebruiker ingevoerde voedingswaarden'};
 const picnicDefaultId='picnic|picnic kaas plantaardige plakken|picnic';
 const picnicSeedKey='eiwitkcal-picnic-kaas-standaard-v1';
@@ -1034,11 +1044,12 @@ let liveSuggestionProducts=[];
 function hideSuggestions(){$('suggestions').hidden=true;$('query').setAttribute('aria-expanded','false')}
 // Directe, gecontroleerde productvoorstellen werken ook zonder internetverbinding.
 // Waarden per 100 g overgenomen uit de door gebruiker aangeleverde Jumbo-productpagina.
-const featuredSearchProducts=[{name:'Picnic Kaas plantaardige plakken',brand:'Picnic',store:'Picnic',quantity:'200 g',protein:0.1,kcal:269,fat:21,sugar:0.1,carbs:19,portion:{grams:25,source:'stuk'},nutritionSource:'Door gebruiker ingevoerde voedingswaarden'}, {name:'Lekker Vrij van Gluten Bruin',brand:'Jumbo',store:'Jumbo',quantity:'500 g',protein:3.9,kcal:220,fat:4.8,sugar:3.6,carbs:37.1,servingsCount:12,nutritionSource:'Jumbo productpagina (door gebruiker gecontroleerd)'}];
+const featuredSearchProducts=[{name:'Tomatenketchup',brand:'Albert Heijn',store:'Albert Heijn',protein:1.2,kcal:87,fat:0,sugar:15,carbs:20,nutritionSource:'Door gebruiker gecontroleerde voedingswaarden'}, {name:'Picnic Kaas plantaardige plakken',brand:'Picnic',store:'Picnic',quantity:'200 g',protein:0.1,kcal:269,fat:21,sugar:0.1,carbs:19,portion:{grams:25,source:'stuk'},nutritionSource:'Door gebruiker ingevoerde voedingswaarden'}, {name:'Lekker Vrij van Gluten Bruin',brand:'Jumbo',store:'Jumbo',quantity:'500 g',protein:3.9,kcal:220,fat:4.8,sugar:3.6,carbs:37.1,servingsCount:12,nutritionSource:'Jumbo productpagina (door gebruiker gecontroleerd)'}];
 // Door het gezin aangewezen zoekfavoriet: 'kaas' toont deze Picnic kaas als eerste.
 function familySearchBoost(p,q){
  const words=smartWords(q);
  const name=smartNormalize(p?.name),shop=smartNormalize(p?.store||p?.brand);
+ if(words.some(w=>w==='ketch'||w==='ketchup'||(w.length>=3&&'ketchup'.startsWith(w)))&&name.includes('tomatenketchup')&&shop.includes('albert heijn'))return 1200;
  return words.some(w=>w==='kaas'||(w.length>=3&&'kaas'.startsWith(w)))&&name.includes('picnic')&&name.includes('kaas')&&name.includes('plantaardige')&&shop.includes('picnic')?1000:0;
 }
 function localSearchCandidates(q,store){
