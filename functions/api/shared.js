@@ -7,10 +7,15 @@ export async function onRequest({request,env}){
  try{
  const hash=await sha(env.DIARY_SECRET+':'+token);const device=await env.DB.prepare('SELECT token_hash FROM diary_devices WHERE token_hash=? AND revoked=0 AND expires_at>?').bind(hash,new Date().toISOString()).first();if(!device)return json({error:'Koppeling verlopen'},401);
  if(request.method==='GET'){
-  // Only the newest value per shared key is needed by the existing client.
-  // The previous query fetched up to 10,000 complete history rows on every poll.
-  const result=await env.DB.prepare("SELECT op_id,entry_id,value,seq FROM diary_operations WHERE type='shared' AND seq IN (SELECT MAX(seq) FROM diary_operations WHERE type='shared' GROUP BY entry_id) ORDER BY seq ASC").all();
-  return json({ops:(result.results||[]).filter(r=>KEYS.has(r.entry_id)).map(r=>({opId:r.op_id,key:r.entry_id,value:JSON.parse(r.value),seq:r.seq}))});
+  const raw=new URL(request.url).searchParams.get('after');
+  const after=raw===null?0:Number(raw);
+  if(!Number.isSafeInteger(after)||after<0)return json({error:'Ongeldige synchronisatiepositie'},400);
+  const query=after===0
+   ? "SELECT op_id,entry_id,value,seq FROM diary_operations WHERE type='shared' AND seq IN (SELECT MAX(seq) FROM diary_operations WHERE type='shared' GROUP BY entry_id) ORDER BY seq ASC"
+   : "SELECT op_id,entry_id,value,seq FROM diary_operations WHERE type='shared' AND seq>? ORDER BY seq ASC LIMIT 301";
+  const result=await (after===0?env.DB.prepare(query):env.DB.prepare(query).bind(after)).all();
+  const found=result.results||[], page=after===0?found:found.slice(0,300);
+  return json({ops:page.filter(r=>KEYS.has(r.entry_id)).map(r=>({opId:r.op_id,key:r.entry_id,value:JSON.parse(r.value),seq:r.seq})),cursor:page.length?page[page.length-1].seq:after,hasMore:after>0&&found.length>300});
  }
  if(request.method==='POST'){
   const raw=await request.text();if(raw.length>160000)return json({error:'Te veel gegevens'},413);let body;try{body=JSON.parse(raw)}catch{return json({error:'Ongeldige JSON'},400)}

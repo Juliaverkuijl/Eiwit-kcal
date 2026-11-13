@@ -8,13 +8,19 @@ export async function onRequest({request,env,context}){
  try{const hash=await sha(env.DIARY_SECRET+':'+token);const device=await env.DB.prepare('SELECT token_hash FROM diary_devices WHERE token_hash=? AND revoked=0 AND expires_at>?').bind(hash,new Date().toISOString()).first();if(!device)return reply({error:'Koppeling verlopen'},401);
  const id=await sha(env.DIARY_SECRET+':julia');
  if(request.method==='GET'){
-  const [legacy,rows]=await Promise.all([env.DB.prepare('SELECT payload FROM shared_diary WHERE id=?').bind(id).first(),env.DB.prepare('SELECT op_id,type,date_key,entry_id,value FROM diary_operations ORDER BY seq ASC LIMIT 10000').all()]);
-  return reply({data:legacy?JSON.parse(legacy.payload):{diary:{}},ops:(rows.results||[]).map(x=>({opId:x.op_id,type:x.type,date:x.date_key,id:x.entry_id,value:JSON.parse(x.value)}))});
+  const url=new URL(request.url), raw=url.searchParams.get('after');
+  const after=raw===null?0:Number(raw);
+  if(!Number.isSafeInteger(after)||after<0)return reply({error:'Ongeldige synchronisatiepositie'},400);
+  const rows=await env.DB.prepare("SELECT seq,op_id,type,date_key,entry_id,value FROM diary_operations WHERE seq>? AND type IN ('upsert','delete','closed','settings') ORDER BY seq ASC LIMIT 301").bind(after).all();
+  const found=rows.results||[], page=found.slice(0,300);
+  let legacy=null;
+  if(after===0)legacy=await env.DB.prepare('SELECT payload FROM shared_diary WHERE id=?').bind(id).first();
+  return reply({...(after===0?{data:legacy?JSON.parse(legacy.payload):{diary:{}}}:{}),ops:page.map(x=>({opId:x.op_id,type:x.type,date:x.date_key,id:x.entry_id,value:JSON.parse(x.value),seq:x.seq})),cursor:page.length?page[page.length-1].seq:after,hasMore:found.length>300});
  }
  if(request.method==='POST'){
   const raw=await request.text();if(raw.length>200000)return reply({error:'Te veel gegevens'},413);let body;try{body=JSON.parse(raw)}catch{return reply({error:'Ongeldige JSON'},400)}
   if(!Array.isArray(body.ops)||body.ops.length>60)return reply({error:'Ongeldige wijzigingen'},400);
-  const stmts=[];const newItems=[];for(const op of body.ops){if(!op||typeof op.opId!=='string'||!/^[0-9a-f-]{36}$/i.test(op.opId)||!['upsert','delete','closed','settings'].includes(op.type)||typeof op.date!=='string'||typeof op.id!=='string'||(op.type!=='settings'&&!validDate(op.date)))return reply({error:'Ongeldige registratie'},400);const val=JSON.stringify(op.value??null);if(val.length>6000||op.id.length>120)return reply({error:'Registratie te groot'},413);if(op.type==='upsert'&&op.value?.name){const seen=await env.DB.prepare("SELECT op_id FROM diary_operations WHERE op_id=? OR (type='upsert' AND date_key=? AND entry_id=?) LIMIT 1").bind(op.opId,op.date,op.id).first();if(!seen)newItems.push(op)}stmts.push(env.DB.prepare('INSERT OR IGNORE INTO diary_operations(op_id,type,date_key,entry_id,value) VALUES(?,?,?,?,?)').bind(op.opId,op.type,op.date,op.id,val))}
+  const stmts=[];const newItems=[];for(const op of body.ops){if(!op||typeof op.opId!=='string'||!/^[0-9a-f-]{36}$/i.test(op.opId)||!['upsert','delete','closed','settings'].includes(op.type)||typeof op.date!=='string'||typeof op.id!=='string'||(op.type!=='settings'&&!validDate(op.date)))return reply({error:'Ongeldige registratie'},400);const val=JSON.stringify(op.value??null);if(val.length>6000||op.id.length>120)return reply({error:'Registratie te groot'},413);if(op.type==='upsert'&&op.value?.name){const seen=await env.DB.prepare("SELECT op_id FROM diary_operations WHERE op_id=? LIMIT 1").bind(op.opId).first();if(!seen)newItems.push(op)}stmts.push(env.DB.prepare('INSERT OR IGNORE INTO diary_operations(op_id,type,date_key,entry_id,value) VALUES(?,?,?,?,?)').bind(op.opId,op.type,op.date,op.id,val))}
   if(stmts.length)await env.DB.batch(stmts);if(newItems.length){const job=sendPush(env,hash,{count:newItems.length,opId:newItems[0].opId}).catch(e=>console.log('Push verzending mislukt',String(e)));if(context?.waitUntil)context.waitUntil(job);else await job}return reply({ok:true});
  }
  return reply({error:'Methode niet toegestaan'},405);
