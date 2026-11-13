@@ -1116,6 +1116,7 @@ $('clearQuery').onclick=()=>{liveSuggestionRequest++;clearTimeout(liveSuggestion
 // Cloudflare D1: one-time device pairing. The secret pairing code is NEVER stored on the device.
 window.__juliaSyncInitialized=true;
 const syncTokenKey='julia-diary-device-token-v1', pendingKey='julia-sync-pending-v2', snapshotKey='julia-sync-snapshot-v2';
+let diaryCursor=0, diaryServerState=null; // Server cursor is per page session; full rebuild on each fresh launch.
 let syncToken=localStorage.getItem(syncTokenKey)||'', syncReady=false, syncBusy=false, syncTimer=null, syncSuppress=false;
 let pending=[];try{pending=JSON.parse(localStorage.getItem(pendingKey)||'[]');if(!Array.isArray(pending))pending=[]}catch{pending=[]}
 let snapshot=null;try{snapshot=JSON.parse(localStorage.getItem(snapshotKey)||'null')}catch{}
@@ -1149,13 +1150,42 @@ function diff(a,b){const ops=[];const ad=normalize(a?.diary),bd=normalize(b?.dia
 function applyOp(s,op){if(op.type==='settings'){s.settings=op.value;return}if(!validDate(op.date))return;const d=s.diary[op.date]||(s.diary[op.date]={entries:[],closed:false});if(op.type==='closed'){d.closed=!!op.value;return}if(op.type==='delete'){d.entries=d.entries.filter(x=>x.id!==op.id);if(op.date<'2026-11-11'&&d.entries.length===0)delete s.diary[op.date];return}if(op.type==='upsert'&&op.value&&op.id){const idx=d.entries.findIndex(x=>x.id===op.id);if(idx<0)d.entries.push({...op.value,id:op.id});else d.entries[idx]={...op.value,id:op.id}}}
 function applyState(s){syncSuppress=true;try{diary=normalize(s.diary);if(s.settings){$('limit').value=s.settings.limit??$('limit').value;$('kcalGoal').value=s.settings.kcalGoal??$('kcalGoal').value}localStorage.setItem(diaryKey,JSON.stringify(diary));localStorage.setItem(key,JSON.stringify({limit:$('limit').value,kcalGoal:$('kcalGoal').value}));loadDay();totals();if(!$('historyPage').hidden)renderHistory()}finally{syncSuppress=false}}
 function scheduleSync(){if(!window.__juliaSyncBooted||syncSuppress||(!syncReady&&!syncToken))return;const now=state();if(!snapshot){snapshot=clone(now);localStorage.setItem(snapshotKey,JSON.stringify(snapshot));return}const ops=diff(snapshot,now);if(ops.length){ops.forEach(op=>familyOwn.add(op.opId));rememberFamilyOps();pending.push(...ops);storeQueue();snapshot=clone(now);localStorage.setItem(snapshotKey,JSON.stringify(snapshot))}if(syncReady){clearTimeout(syncTimer);syncTimer=setTimeout(syncCycle,350)}}
-async function requestDiary(method,body){const r=await fetch('/api/diary',{method,headers:{'Authorization':'Bearer '+syncToken,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}) ,cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(data.error||'Verbinding mislukt');e.status=r.status;throw e}return data}
-async function syncCycle(){pending.forEach(op=>familyOwn.add(op.opId));rememberFamilyOps();if(!syncReady||syncBusy||!navigator.onLine)return;syncBusy=true;try{if(pending.length){const batch=pending.slice(0,60);await requestDiary('POST',{ops:batch});const ids=new Set(batch.map(x=>x.opId));pending=pending.filter(x=>!ids.has(x.opId));storeQueue()}const remote=await requestDiary('GET');checkFamilyChanges(remote.ops,false);const base={diary:normalize(remote.data?.diary||{}),settings:remote.data?.settings||state().settings};for(const op of remote.ops||[])applyOp(base,op);for(const op of pending)applyOp(base,op);applyState(base);snapshot=clone(state());localStorage.setItem(snapshotKey,JSON.stringify(snapshot));syncStatus(pending.length?'Wijzigingen worden opgeslagen':'Automatisch bijgewerkt');}catch(e){if(e.status===401){syncReady=false;syncStatus('Koppeling niet geldig. Eenmalig opnieuw koppelen.')}else syncStatus('Synchronisatie tijdelijk niet beschikbaar: '+e.message+' · gegevens bewaard op dit toestel')}finally{syncBusy=false;if(syncReady&&pending.length)setTimeout(syncCycle,1200)}}
-async function initialSync(){syncStatus('Gezamenlijk dagboek openen…');const remote=await requestDiary('GET');checkFamilyChanges(remote.ops,true);const remoteState={diary:normalize(remote.data?.diary||{}),settings:remote.data?.settings||state().settings};for(const op of remote.ops||[])applyOp(remoteState,op);
- // An existing cloud diary is authoritative. Keep a safety copy of any old local diary without prompting.
- if(!snapshot){const local=state();if(Object.values(remoteState.diary).some(d=>d.entries.length)){localStorage.setItem('julia-lokaal-voor-overgang-v2',JSON.stringify(local));snapshot=clone(remoteState)}else{snapshot=clone({diary:{},settings:remoteState.settings});pending.push(...diff(snapshot,local));storeQueue()}}else{ // Resume pending local changes without discarding edits made while offline.
-  const unsent=diff(snapshot,state());if(unsent.length){pending.push(...unsent);storeQueue()}}
- syncReady=true;const combined=clone(remoteState);for(const op of pending)applyOp(combined,op);applyState(combined);snapshot=clone(state());localStorage.setItem(snapshotKey,JSON.stringify(snapshot));syncStatus('Gekoppeld · automatisch synchroniseren');await syncCycle()}
+async function requestDiary(method,body,after){const r=await fetch('/api/diary'+(method==='GET'?'?after='+encodeURIComponent(after||0):''),{method,headers:{'Authorization':'Bearer '+syncToken,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}) ,cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(data.error||'Verbinding mislukt');e.status=r.status;throw e}return data}
+async function fetchDiaryChanges(initial){
+ let cursor=initial?0:diaryCursor, base=initial?null:clone(diaryServerState);
+ for(let page=0;page<100;page++){
+  const remote=await requestDiary('GET',null,cursor);
+  checkFamilyChanges(remote.ops,initial);
+  if(!base)base={diary:normalize(remote.data?.diary||{}),settings:remote.data?.settings||state().settings};
+  for(const op of remote.ops||[])applyOp(base,op);
+  cursor=remote.cursor??cursor;
+  if(!remote.hasMore){diaryServerState=base;diaryCursor=cursor;return base}
+ }
+ throw Error('Te veel wijzigingen tegelijk; probeer opnieuw');
+}
+async function syncCycle(){
+ pending.forEach(op=>familyOwn.add(op.opId));rememberFamilyOps();
+ if(!syncReady||syncBusy||!navigator.onLine)return;
+ syncBusy=true;
+ try{
+  if(pending.length){const batch=pending.slice(0,60);await requestDiary('POST',{ops:batch});const ids=new Set(batch.map(x=>x.opId));pending=pending.filter(x=>!ids.has(x.opId));storeQueue()}
+  const base=await fetchDiaryChanges(false);
+  const combined=clone(base);for(const op of pending)applyOp(combined,op);
+  applyState(combined);snapshot=clone(state());localStorage.setItem(snapshotKey,JSON.stringify(snapshot));
+  syncStatus(pending.length?'Wijzigingen worden opgeslagen':'Automatisch bijgewerkt');
+ }catch(e){if(e.status===401){syncReady=false;syncStatus('Koppeling niet geldig. Eenmalig opnieuw koppelen.')}else syncStatus('Synchronisatie tijdelijk niet beschikbaar: '+e.message+' · gegevens bewaard op dit toestel')}
+ finally{syncBusy=false;if(syncReady&&pending.length)setTimeout(syncCycle,1200)}
+}
+async function initialSync(){
+ syncStatus('Gezamenlijk dagboek openen…');
+ const remoteState=await fetchDiaryChanges(true);
+ // A populated cloud diary is authoritative on first pairing; keep local safety copy.
+ if(!snapshot){const local=state();if(Object.values(remoteState.diary).some(d=>d.entries.length)){localStorage.setItem('julia-lokaal-voor-overgang-v2',JSON.stringify(local));snapshot=clone(remoteState)}else{snapshot=clone({diary:{},settings:remoteState.settings});pending.push(...diff(snapshot,local));storeQueue()}}
+ else{const unsent=diff(snapshot,state());if(unsent.length){pending.push(...unsent);storeQueue()}}
+ syncReady=true;const combined=clone(remoteState);for(const op of pending)applyOp(combined,op);
+ applyState(combined);snapshot=clone(state());localStorage.setItem(snapshotKey,JSON.stringify(snapshot));
+ syncStatus('Gekoppeld · automatisch synchroniseren');await syncCycle()
+}
 $('syncConnect').onclick=async()=>{const code=$('pairCode').value.trim();if(code.length<12){alert('Gebruik de ingestelde gezinscode (minimaal 12 tekens).');return}$('syncConnect').disabled=true;syncStatus('Koppelen…');try{const r=await fetch('/api/pair',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({code})});const data=await r.json();if(!r.ok)throw Error(data.error||'Koppelen mislukt');syncToken=data.token;localStorage.setItem(syncTokenKey,syncToken);$('pairCode').value='';await initialSync()}catch(e){syncStatus('Koppelen niet gelukt: '+e.message)}finally{$('syncConnect').disabled=false}};
 $('syncDisconnect').onclick=async()=>{if(!confirm('Alleen deze telefoon ontkoppelen?'))return;const old=syncToken;syncReady=false;syncToken='';localStorage.removeItem(syncTokenKey);syncStatus('Dit apparaat is ontkoppeld');if(old)try{await fetch('/api/pair',{method:'DELETE',headers:{Authorization:'Bearer '+old}})}catch{}};
 // Keep one permanent per-entry ID, including while offline, before any edit can sync.
@@ -1382,10 +1412,11 @@ function showAddConfirmation(){
   }catch(e){console.warn('Weergave vernieuwen:',e)}
  }
  function collect(){if(!syncToken)return;for(const k of keys){const v=read(k);if(!same(v,base[k])){const existing=queue.findIndex(x=>x.key===k);if(existing>=0)queue.splice(existing,1);queue.push({opId:crypto.randomUUID(),key:k,value:v});base[k]=v;}}save()}
- async function req(method,body){const r=await fetch('/api/shared',{method,headers:{Authorization:'Bearer '+syncToken,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok)throw Error(data.error||'Gedeelde gegevens niet bereikbaar');return data}
+ let sharedCursor=0, sharedRemote={};
+ async function req(method,body,after){const r=await fetch('/api/shared'+(method==='GET'?'?after='+encodeURIComponent(after||0):''),{method,headers:{Authorization:'Bearer '+syncToken,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}),cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok)throw Error(data.error||'Gedeelde gegevens niet bereikbaar');return data}
  async function cycle(){if(!syncReady||busy||!navigator.onLine)return;busy=true;try{
   if(ready)collect();if(queue.length){const batch=queue.slice(0,20);await req('POST',{ops:batch});const ids=new Set(batch.map(x=>x.opId));queue=queue.filter(x=>!ids.has(x.opId));save()}
-  const remote=await req('GET');const latest={};for(const op of remote.ops||[])latest[op.key]=op.value;
+  let cursor=sharedCursor,latest={...sharedRemote};for(let page=0;page<100;page++){const remote=await req('GET',null,cursor);for(const op of remote.ops||[])latest[op.key]=op.value;cursor=remote.cursor??cursor;if(!remote.hasMore)break;if(page===99)throw Error('Te veel gedeelde wijzigingen')}sharedRemote=latest;sharedCursor=cursor;
   for(const k of keys){const local=read(k),r=latest[k];if(r===undefined){if(local!==null&&!queue.some(x=>x.key===k)){queue.push({opId:crypto.randomUUID(),key:k,value:local});base[k]=local}continue}
    const pending=queue.some(x=>x.key===k);if(pending)continue;
    if(!ready&&local!==null&&!same(local,r)){const merged=merge(k,r,local);refresh(k,merged);base[k]=merged;if(!same(merged,r))queue.push({opId:crypto.randomUUID(),key:k,value:merged});}
