@@ -1234,7 +1234,8 @@ function stopBarcodeCamera(){scanActive=false;scanLoopId++;scanTorchOn=false;sca
 async function lookupBarcode(){const code=$('barcodeManual').value.replace(/\D/g,'');if(!/^\d{8,14}$/.test(code)){$('status').textContent='Vul een barcode van 8 tot 14 cijfers in.';return}stopBarcodeCamera();$('status').textContent='Barcode opzoeken…';try{const r=await fetch('/api/barcode?code='+encodeURIComponent(code));const data=await r.json();if(!r.ok||!data.product)throw Error(data.error||'Product niet gevonden');choose(data.product);$('status').textContent='Product via barcode gevonden. '+(verifiedPortionFromProduct(selected)?'Per stuk staat automatisch op 1; controleer de inhoud en voedingswaarden.':'Stukgewicht niet betrouwbaar gevonden; vul de hoeveelheid zelf in.');}catch(e){$('status').textContent=e.message+' Je kunt het product ook handmatig zoeken.'}}
 $('barcodeLookup').onclick=lookupBarcode;$('barcodeManual').onkeydown=e=>{if(e.key==='Enter')lookupBarcode()};$('scanStop').onclick=stopBarcodeCamera;
 function loadZXing(){if(window.ZXing?.BrowserMultiFormatReader)return Promise.resolve();return new Promise((resolve,reject)=>{const existing=document.getElementById('zxingBarcodeLib');if(existing){existing.addEventListener('load',resolve,{once:true});existing.addEventListener('error',reject,{once:true});return}const el=document.createElement('script');el.id='zxingBarcodeLib';el.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';el.onload=()=>window.ZXing?.BrowserMultiFormatReader?resolve():reject(Error('Scannerbibliotheek niet beschikbaar'));el.onerror=()=>reject(Error('Scannerbibliotheek kon niet worden geladen'));document.head.appendChild(el)})}
-function foundBarcode(raw){const code=String(raw||'').replace(/\D/g,'');if(!/^\d{8,14}$/.test(code))return false;$('barcodeManual').value=code;stopBarcodeCamera();lookupBarcode();return true}
+let scanResultLocked=false;
+function foundBarcode(raw){const code=String(raw||'').replace(/\D/g,'');if(!/^\d{8,14}$/.test(code)||scanResultLocked)return false;scanResultLocked=true;$('barcodeManual').value=code;stopBarcodeCamera();lookupBarcode();return true}
 async function scanWithZXing(token){
  await loadZXing();
  if(!scanActive||token!==scanLoopId)return;
@@ -1300,6 +1301,7 @@ $('barcodePhotoInput').addEventListener('change',async e=>{
 });
 $('scanBtn').onclick=async()=>{
  if(scanActive){stopBarcodeCamera();return}
+ scanResultLocked=false;
  const btn=$('scanBtn');btn.disabled=true;
  $('status').textContent='Camera openen…';
  try{
@@ -1314,15 +1316,14 @@ $('scanBtn').onclick=async()=>{
   scannerControls();
   $('scanMessage').textContent='Richt de barcode op het groene kader, ook verticaal. Houd 10–20 cm afstand en wacht even tot de camera scherpstelt.';
   $('status').textContent='Camera actief — barcode wordt automatisch gezocht.';
-  // ZXing as primary iOS reader; Safari native detection is a fallback.
+  // Start de native lezer onafhankelijk van ZXing: een actieve camera is nog geen werkende decoder.
   let started=false;
-  try{await scanWithZXing(token);started=!!scanReader}catch(err){$('scanMessage').textContent='Barcodelezer kon niet laden. Kies een barcodefoto of voer de cijfers in.'}
-  if(!scanActive||token!==scanLoopId)return;
-  if(!started && typeof BarcodeDetector!=='undefined'){
+  if(typeof BarcodeDetector!=='undefined'){
    try{
     const supported=await BarcodeDetector.getSupportedFormats();
     const formats=['ean_13','ean_8','upc_a','upc_e'].filter(f=>supported.includes(f));
     if(formats.length){
+     started=true;
      const detector=new BarcodeDetector({formats});let busy=false,last=0,attempts=0;
      const loop=async(time)=>{
       if(!scanActive||token!==scanLoopId)return;
@@ -1338,7 +1339,9 @@ $('scanBtn').onclick=async()=>{
     }
    }catch(e){}
   }
-  if(!started)$('status').textContent='Camera actief, maar automatische barcodelezer niet beschikbaar. Kies een barcodefoto.';
+  // ZXing als tweede, gelijktijdige decoder voor iOS en browsers zonder native ondersteuning.
+  try{await scanWithZXing(token);started=!!scanReader||started}catch(err){if(!started&&scanActive)$('scanMessage').textContent='Automatische herkenning is niet beschikbaar. Kies een barcodefoto of voer de cijfers in.'}
+  if(scanActive&&token===scanLoopId&&!started)$('status').textContent='Camera actief, maar geen barcodelezer beschikbaar. Kies een barcodefoto.';
 
  }catch(e){
   stopBarcodeCamera();
@@ -1348,6 +1351,7 @@ $('scanBtn').onclick=async()=>{
  }finally{btn.disabled=false}
 };
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&scanActive)stopBarcodeCamera()});
+window.addEventListener('pagehide',stopBarcodeCamera);
 $('supermarketUrlBtn').onclick=async()=>{const url=$('supermarketUrl').value.trim();if(!url){$('status').textContent='Plak eerst een productlink van AH of Jumbo.';return}const btn=$('supermarketUrlBtn');btn.disabled=true;$('status').textContent='Productpagina ophalen…';try{const r=await fetch('/api/store-product?url='+encodeURIComponent(url));const d=await r.json();if(!r.ok||!d.product)throw Error(d.error||'Productgegevens niet gevonden');$('status').textContent='Product gevonden bij '+d.product.store+'. Controleer de waarden op de verpakking.';choose(d.product)}catch(e){$('status').textContent='Niet automatisch uit te lezen: '+e.message+' Je kunt het product handmatig toevoegen.'}finally{btn.disabled=false}};
 $('clearQuery').onclick=()=>{liveSuggestionRequest++;clearTimeout(liveSuggestionTimer);liveSuggestionProducts=[];smartSearchSequence++;$('searchBtn').disabled=false;$('query').value='';$('results').replaceChildren();$('status').textContent='';hideSuggestions();$('clearQuery').hidden=true;$('query').focus()};$('searchBtn').onclick=search;$('query').addEventListener('input',()=>{$('results').replaceChildren();$('status').textContent='';$('clearQuery').hidden=!$('query').value;liveSuggestionProducts=[];showSuggestions();scheduleLiveSuggestions()});$('query').addEventListener('focus',()=>{if($('query').value.trim())showSuggestions();});$('query').addEventListener('blur',()=>setTimeout(hideSuggestions,120));$('query').onkeydown=e=>{if(e.key==='Escape')hideSuggestions();if(e.key==='Enter'){e.preventDefault();search()}};$('store').addEventListener('change',()=>{liveSuggestionProducts=[];showSuggestions();scheduleLiveSuggestions()});loadDay();totals();calc();showPage('today');document.addEventListener('visibilitychange',()=>{if(!document.hidden)ensureDate()});setInterval(ensureDate,60000);
 
