@@ -1463,6 +1463,7 @@ async function syncCycle(){
  }catch(e){if(e.status===401){syncReady=false;syncStatus('Koppeling niet geldig. Eenmalig opnieuw koppelen.')}else syncStatus('Synchronisatie tijdelijk niet beschikbaar: '+e.message+' · gegevens bewaard op dit toestel')}
  finally{syncBusy=false;if(syncReady&&pending.length)setTimeout(syncCycle,1200)}
 }
+window.juliaRefreshDiary=()=>syncCycle();
 async function initialSync(){
  syncStatus('Gezamenlijk dagboek openen…');
  const remoteState=await fetchDiaryChanges(true);
@@ -1703,6 +1704,7 @@ function showAddConfirmation(){
   }
   ready=true;lastError='';save();
  }catch(e){lastError=e.message;console.warn('Extra synchronisatie:',lastError)}finally{busy=false}}
+ window.juliaRefreshShared=()=>cycle();
  setInterval(()=>{if(syncReady)cycle()},60000);
  window.addEventListener('focus',()=>{if(syncReady)cycle()});
  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&syncReady)cycle()});
@@ -2010,6 +2012,49 @@ function setup(){
  if(area){const obs=new MutationObserver(()=>{if(!area.hidden)details.open=true});obs.observe(area,{attributes:true,attributeFilter:['hidden']});}
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
+})();
+</script>
+
+<style id="pullRefreshStyles">
+#pullRefreshIndicator{position:fixed;z-index:99999;top:env(safe-area-inset-top,0px);left:50%;transform:translate(-50%,-115%);background:#e5f8ec;color:#07593a;border:1px solid #b5dec7;border-radius:0 0 16px 16px;padding:9px 16px;font-size:13px;font-weight:750;box-shadow:0 4px 15px #0002;pointer-events:none;opacity:0;transition:transform .18s ease,opacity .18s ease;white-space:nowrap}
+#pullRefreshIndicator.visible{opacity:1;transform:translate(-50%,0)}
+</style>
+<script id="pullRefreshLogic">
+(()=>{
+ let startY=0,startX=0,tracking=false,triggered=false,refreshing=false,hideTimer;
+ const indicator=document.createElement('div');indicator.id='pullRefreshIndicator';indicator.setAttribute('role','status');indicator.setAttribute('aria-live','polite');indicator.textContent='↓ Trek om te verversen';
+ const ready=()=>document.body.appendChild(indicator);
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ready,{once:true});else ready();
+ function scrollAtTop(){return window.scrollY<=2&&document.scrollingElement?.scrollTop<=2}
+ function message(t,show=true){clearTimeout(hideTimer);indicator.textContent=t;indicator.classList.toggle('visible',show)}
+ document.addEventListener('touchstart',e=>{
+  if(refreshing||e.touches.length!==1||!scrollAtTop())return;
+  const target=e.target;
+  if(target.closest('input,textarea,select,[contenteditable="true"],dialog'))return;
+  tracking=true;triggered=false;startY=e.touches[0].clientY;startX=e.touches[0].clientX;
+ },{passive:true});
+ document.addEventListener('touchmove',e=>{
+  if(!tracking||e.touches.length!==1)return;
+  const dy=e.touches[0].clientY-startY,dx=Math.abs(e.touches[0].clientX-startX);
+  if(dx>dy||!scrollAtTop()||dy<0){tracking=false;message('',false);return}
+  if(dy>24){triggered=dy>=85;message(triggered?'↻ Laat los om te verversen':'↓ Trek om te verversen')}
+ },{passive:true});
+ document.addEventListener('touchcancel',()=>{tracking=false;triggered=false;message('',false)},{passive:true});
+ document.addEventListener('touchend',async()=>{
+  if(!tracking)return;tracking=false;
+  if(!triggered){message('',false);return}triggered=false;
+  if(refreshing)return;refreshing=true;
+  if(!navigator.onLine){message('Offline · gegevens blijven bewaard');hideTimer=setTimeout(()=>message('',false),1800);refreshing=false;return}
+  message('↻ Gegevens verversen…');
+  try{
+   const jobs=[];
+   if(typeof window.juliaRefreshDiary==='function')jobs.push(window.juliaRefreshDiary());
+   if(typeof window.juliaRefreshShared==='function')jobs.push(window.juliaRefreshShared());
+   await Promise.all(jobs);
+   message('✓ Gegevens bijgewerkt');
+  }catch(e){message('Verbinding controleren · probeer opnieuw')}
+  finally{refreshing=false;hideTimer=setTimeout(()=>message('',false),1400)}
+ },{passive:true});
 })();
 </script>
 </body></html>
