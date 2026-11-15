@@ -2088,7 +2088,7 @@ function init(){
  function select(d){if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d>today())return;window.eiwitBrowsingDate=d!==today();loadDay(d);totals();refresh();if(typeof renderPremiumDashboard==='function')renderPremiumDashboard();}
  function step(n){const d=new Date(currentDate+'T12:00:00');d.setDate(d.getDate()+n);select([d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'))}
  prev.addEventListener('click',()=>step(-1));next.addEventListener('click',()=>step(1));
- title.addEventListener('click',()=>{picker.value=currentDate;try{picker.showPicker()}catch(e){picker.focus();picker.click()}});
+ title.addEventListener('click',()=>{picker.value=currentDate;try{picker.showPicker()}catch(e){picker.focus()}});
  picker.addEventListener('change',()=>select(picker.value));
  close.addEventListener('click',()=>{const locked=isDayLocked(currentDate);if(locked&&!confirm('Deze dag weer ontgrendelen?'))return;setDayLock(currentDate,!locked);refresh()});
  document.getElementById('navDashboard')?.addEventListener('click',refresh);
@@ -2116,7 +2116,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <style id="dashboardNativeDatePickerFix">
 #dashboardPage .dashboardDateBar{position:relative!important}
 #dashboardPage #dashboardDateTitle{display:block!important;flex:1!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;text-align:center!important;background:#d3f0df!important;color:#064b32!important;border:0!important;border-radius:9px!important;font-size:14px!important;font-weight:800!important;min-height:36px!important;padding:6px 5px!important}
-#dashboardPage #dashDateInput{position:absolute!important;left:50%!important;top:50%!important;width:1px!important;height:1px!important;opacity:0!important;pointer-events:none!important}
+#dashboardPage #dashDateInput{position:absolute!important;left:48px!important;right:48px!important;top:0!important;width:calc(100% - 96px)!important;height:100%!important;min-height:36px!important;opacity:0.015!important;pointer-events:auto!important;z-index:10!important;cursor:pointer!important;-webkit-appearance:none!important;appearance:none!important;font-size:16px!important}
 </style>
 </body></html>
 
