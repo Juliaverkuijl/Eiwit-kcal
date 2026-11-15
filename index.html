@@ -2170,5 +2170,37 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 #dashboardPage .eiwitHero .heroBar{display:none!important}
 @media(max-width:375px){#dashboardPage .eiwitHero::before{inset:7px}#dashboardPage .eiwitHero{padding:10px 3px!important}#dashboardPage .eiwitHero .heroValue{font-size:clamp(19px,5.3vw,25px)!important}}
 </style>
+
+<style id="dashboardHeroHistoryLink20261116">
+#dashboardPage .eiwitHero{cursor:pointer!important;touch-action:manipulation!important}
+#dashboardPage .eiwitHero:focus-visible{outline:3px solid #6ad9a0!important;outline-offset:4px!important}
+#dashboardPage .eiwitHero::after{content:"Bekijk historie ›";position:absolute;bottom:13%;left:0;right:0;font-size:10px;font-weight:700;color:#426c5c;pointer-events:none}
+#dashboardPage .eiwitHero .heroPercent{margin-bottom:8px!important}
+</style>
+<script id="dashboardHeroHistoryLinkLogic20261116">
+(function(){
+function openHistory(metric){
+  if(typeof showPage!=='function')return;
+  showPage('history');
+  const select=document.getElementById('mealTrendMetric');
+  if(select){select.value=metric;select.dispatchEvent(new Event('change',{bubbles:true}));}
+  if(typeof renderHistory==='function')renderHistory();
+  requestAnimationFrame(()=>{
+    const chart=document.querySelector('#historyPage .mealTrendPanel');
+    if(chart)chart.scrollIntoView({block:'start',behavior:'smooth'});
+  });
+}
+function setup(){
+  [['eiwitProteinHero','protein'],['eiwitKcalHero','kcal']].forEach(([id,metric])=>{
+    const el=document.getElementById(id);if(!el||el.dataset.historyLink==='yes')return;
+    el.dataset.historyLink='yes';el.setAttribute('role','button');el.setAttribute('tabindex','0');
+    el.setAttribute('aria-label',(metric==='protein'?'Eiwit':'Calorieën')+' verbruiksgrafiek in Historie openen');
+    el.addEventListener('click',()=>openHistory(metric));
+    el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openHistory(metric)}});
+  });
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
+})();
+</script>
 </body></html>
 
