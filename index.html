@@ -1937,5 +1937,80 @@ observer.observe(document.getElementById('chosen'),{childList:true,subtree:true}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
 </script>
+
+<style id="compactOneScreen20261115">
+/* Producten: geen dubbele appkop, zoek- en invoerblok direct zichtbaar */
+body:has(#productPage:not([hidden])) header.top{display:none!important}
+#productPage{padding-top:4px!important}
+#productPage>.card:first-child{padding:10px 12px!important;margin:0 0 8px!important}
+#productPage>.card:first-child>.productSectionHeading,#calculator>.productSectionHeading{display:none!important}
+#productPage>.card:first-child>label[for="store"],#productPage>.card:first-child>label[for="query"]{display:none!important}
+#productPage .search{margin:0 0 8px!important}
+#productPage .search input{min-height:43px!important;font-size:14px!important}
+#productPage .search #searchBtn{min-height:43px!important;padding:8px 11px!important}
+#productPage .productShortcuts{display:flex!important;gap:7px!important;margin:7px 0!important}
+#productPage .productShortcuts button{flex:1;padding:9px 6px!important;font-size:12px!important;min-height:40px!important}
+#productPage .compactSearchActions{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:6px;margin:5px 0 7px}
+#productPage .compactSearchActions select,#productPage .compactSearchActions button{min-width:0;width:100%;font-size:12px!important;min-height:39px!important;padding:7px 6px!important}
+#productPage .compactSearchActions #scanBtn{font-size:0!important}
+#productPage .compactSearchActions #scanBtn::after{content:"▥ Scan";font-size:12px}
+#productPage .compactSearchActions #barcodePhotoBtn{font-size:0!important}
+#productPage .compactSearchActions #barcodePhotoBtn::after{content:"▧ Foto";font-size:12px}
+#productPage .compactLookupExtras{margin:5px 0!important;border:1px solid #dcebe2;border-radius:10px;padding:0 9px}
+#productPage .compactLookupExtras>summary{font-size:12px;padding:8px 0;cursor:pointer;color:#176448;font-weight:700}
+#productPage .compactLookupExtras>.compactLookupBody{padding:2px 0 9px}
+#productPage #quickPanel{margin:5px 0!important}
+#productPage #quickPanel>summary{padding:8px!important;font-size:12px!important}
+#productPage #calculator{margin-top:0!important;padding:10px 12px!important}
+#productPage #calculator .selectedProductRow{margin-bottom:7px!important}
+#productPage #calculator #chosen{padding:6px 8px!important;font-size:12px!important}
+#productPage #calculator .productNutrientTiles{margin-top:6px!important}
+#productPage #calculator .productNutrientTiles .nutrientPrimary{padding:9px!important;min-height:72px!important}
+#productPage #calculator .productNutrientTiles .nutrientSecondary{padding:7px!important;min-height:52px!important}
+/* Dashboard: minder lege ruimte, meer dagoverzicht in een scherm */
+#dashboardPage{padding-top:2px!important}
+#dashboardPage #syncPanel{margin:2px 0 7px!important;border-radius:13px!important}
+#dashboardPage #syncNotice{padding:8px 12px!important}
+#dashboardPage #syncHeadline{font-size:14px!important;line-height:1.15!important}
+#dashboardPage #syncNoticeText{font-size:11px!important;line-height:1.2!important}
+#dashboardPage #syncDetails>summary{padding:6px 0!important;font-size:11px!important}
+#dashboardPage .eiwitHeroGrid{gap:8px!important;margin:5px 0 9px!important}
+#dashboardPage .eiwitHero{padding:10px!important;min-height:0!important}
+#dashboardPage .eiwitHero strong{line-height:1.05!important}
+#dashboardPage .eiwitActions{gap:6px!important;margin:4px 0 8px!important}
+#dashboardPage .eiwitActions button{min-height:40px!important;padding:8px 5px!important;font-size:12px!important}
+#dashboardPage .premium-meals-card{padding:11px 12px!important;margin:7px 0!important}
+#dashboardPage .premium-meals-card h2{font-size:18px!important;margin:0 0 7px!important}
+#dashboardPage #premiumMeals{gap:4px!important}
+#dashboardPage #premiumMeals>*,#dashboardPage #premiumMeals details{margin:3px 0!important}
+@media(max-width:430px){#dashboardPage .eiwitHero strong{font-size:clamp(23px,6vw,31px)!important}}
+</style>
+<script id="compactOneScreenLogic20261115">
+(function(){
+function setup(){
+ const page=document.getElementById('productPage');
+ if(!page||page.querySelector('.compactSearchActions'))return;
+ const card=page.querySelector(':scope > .card:first-child');
+ const store=document.getElementById('store'),scan=document.getElementById('scanBtn'),photo=document.getElementById('barcodePhotoBtn');
+ const search=card?.querySelector('.search');
+ if(!card||!store||!scan||!photo||!search)return;
+ const actions=document.createElement('div');actions.className='compactSearchActions';
+ search.insertAdjacentElement('afterend',actions);
+ actions.append(store,scan,photo);
+ const details=document.createElement('details');details.className='compactLookupExtras';
+ const sum=document.createElement('summary');sum.textContent='🔗 Productlink of barcode handmatig invoeren';
+ const body=document.createElement('div');body.className='compactLookupBody';
+ details.append(sum,body);
+ actions.insertAdjacentElement('afterend',details);
+ for(const id of ['supermarketUrl','barcodeManual']){
+  const e=document.getElementById(id);
+  if(e&&e.parentElement?.classList.contains('flex'))body.append(e.parentElement);
+ }
+ const area=document.getElementById('scanArea');
+ if(area){const obs=new MutationObserver(()=>{if(!area.hidden)details.open=true});obs.observe(area,{attributes:true,attributeFilter:['hidden']});}
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
+})();
+</script>
 </body></html>
 
