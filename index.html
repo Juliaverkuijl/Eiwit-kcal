@@ -1232,20 +1232,17 @@ async function lookupBarcode(){const code=$('barcodeManual').value.replace(/\D/g
 $('barcodeLookup').onclick=lookupBarcode;$('barcodeManual').onkeydown=e=>{if(e.key==='Enter')lookupBarcode()};$('scanStop').onclick=stopBarcodeCamera;
 function loadZXing(){if(window.ZXing?.BrowserMultiFormatReader)return Promise.resolve();return new Promise((resolve,reject)=>{const existing=document.getElementById('zxingBarcodeLib');if(existing){existing.addEventListener('load',resolve,{once:true});existing.addEventListener('error',reject,{once:true});return}const el=document.createElement('script');el.id='zxingBarcodeLib';el.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js';el.onload=()=>window.ZXing?.BrowserMultiFormatReader?resolve():reject(Error('Scannerbibliotheek niet beschikbaar'));el.onerror=()=>reject(Error('Scannerbibliotheek kon niet worden geladen'));document.head.appendChild(el)})}
 function foundBarcode(raw){const code=String(raw||'').replace(/\D/g,'');if(!/^\d{8,14}$/.test(code))return false;$('barcodeManual').value=code;stopBarcodeCamera();lookupBarcode();return true}
-async function scanWithZXing(){
+async function scanWithZXing(token){
  await loadZXing();
+ if(!scanActive||token!==scanLoopId)return;
  const hints=new Map();
  if(ZXing.DecodeHintType&&ZXing.BarcodeFormat){hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E]);hints.set(ZXing.DecodeHintType.TRY_HARDER,true)}
- scanReader=new ZXing.BrowserMultiFormatReader(hints,120);
- scanActive=true;$('scanArea').hidden=false;
- $('scanMessage').textContent='Houd de streepjescode binnen het beeld. Beweeg langzaam dichterbij of verder weg; gebruik bij reflecties de lampknop.';
+ const reader=new ZXing.BrowserMultiFormatReader(hints,180);
+ scanReader=reader;
+ // Gebruik de al geopende camerastream; vraag op iOS geen tweede cameratoestemming.
  const video=$('scanVideo');
- // Achtercamera expliciet aanvragen; anders kiest ZXing soms de selfiecamera.
- try{
-  scanStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});
-  video.srcObject=scanStream;await video.play();scannerControls();
-  await scanReader.decodeFromVideoElement(video,(result,error)=>{if(scanActive&&result)foundBarcode(result.getText())});
- }catch(e){stopBarcodeCamera();throw e}
+ const scanning=reader.decodeFromVideoElement(video,(result,error)=>{if(scanActive&&token===scanLoopId&&result)foundBarcode(result.getText())});
+ Promise.resolve(scanning).catch(err=>{if(scanActive&&token===scanLoopId)$('scanMessage').textContent='Automatisch lezen onderbroken. Sluit de camera en probeer opnieuw, of kies een barcodefoto.'});
 }
 // Barcodefoto's worden alleen lokaal verwerkt; er wordt geen afbeelding geüpload.
 $('barcodePhotoBtn').onclick=()=>{$('barcodePhotoInput').click()};
@@ -1303,71 +1300,60 @@ $('scanBtn').onclick=async()=>{
  const btn=$('scanBtn');btn.disabled=true;
  $('status').textContent='Camera openen…';
  try{
-  if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera niet beschikbaar in deze browser');
-  // iOS homescreen apps may not implement BarcodeDetector. ZXing remains the fallback.
-  let formats=[];
+  if(!window.isSecureContext)throw Error('Open de app via HTTPS om de camera te gebruiken');
+  if(!navigator.mediaDevices?.getUserMedia)throw Error('Camera niet beschikbaar. Open de app in Safari of via het beginscherm');
+  // Vraag de camera direct vanuit de tikactie aan, vóór asynchrone detectorchecks.
+  scanStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});
+  const video=$('scanVideo');video.setAttribute('playsinline','');video.muted=true;video.srcObject=scanStream;
+  $('scanArea').hidden=false;
+  await video.play();
+  scanActive=true;const token=++scanLoopId;
+  scannerControls();
+  $('scanMessage').textContent='Houd de volledige barcode scherp in het groene kader. Beweeg iets verder weg als de camera niet scherpstelt.';
+  $('status').textContent='Camera actief — barcode wordt automatisch gezocht.';
+  let detector=null;
   if(typeof BarcodeDetector!=='undefined'){
-   try{const supported=await BarcodeDetector.getSupportedFormats();formats=['ean_13','ean_8','upc_a','upc_e'].filter(f=>supported.includes(f))}catch(e){}
+   try{const supported=await BarcodeDetector.getSupportedFormats();const formats=['ean_13','ean_8','upc_a','upc_e'].filter(f=>supported.includes(f));if(formats.length)detector=new BarcodeDetector({formats})}catch(e){}
   }
-  if(formats.length){
-   // Only request the camera after a tap. Avoid repeatedly recreating tracks while scanning.
-   scanStream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720},frameRate:{ideal:30,max:30}}});
-   $('scanArea').hidden=false;
-   const video=$('scanVideo');video.srcObject=scanStream;await video.play();scannerControls();
-   const detector=new BarcodeDetector({formats});scanActive=true;
-   $('scanMessage').textContent='Houd de volledige barcode binnen het groene kader, ongeveer 10–20 cm van de camera. Bij glans: kantel de verpakking iets. De scanner leest ook gedraaide codes.';
-   $('status').textContent='Camera actief — barcode wordt automatisch gezocht.';
-   const token=++scanLoopId;let busy=false,last=0,lastExtra=0,attempts=0;
+  if(!scanActive||token!==scanLoopId)return;
+  if(!detector){
+   await scanWithZXing(token);
+  }else{
+   let busy=false,last=0,attempts=0,lastExtra=0,backupStarted=false;
    const loop=async(time)=>{
     if(!scanActive||token!==scanLoopId)return;
-    if(!busy&&time-last>=140&&video.readyState>=2){
+    if(!busy&&time-last>=170&&video.readyState>=2){
      busy=true;last=time;
      try{
       const hits=await detector.detect(video);
       for(const hit of hits){if(foundBarcode(hit.rawValue))return}
       attempts++;
-      // Onafhankelijke ZXing-backup: iOS' eigen detector mist soms EAN-streepjescodes.
-      // Laad één keer op de achtergrond en scan met dezelfde camerastream.
-      if(attempts===3&&!scanReader){
-       loadZXing().then(()=>{
-        if(!scanActive||token!==scanLoopId||scanReader)return;
-        const hints=new Map();
-        if(ZXing.DecodeHintType&&ZXing.BarcodeFormat){
-         hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E]);
-         hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
-        }
-        scanReader=new ZXing.BrowserMultiFormatReader(hints,180);
-       }).catch(()=>{});
+      if(attempts>=5&&!backupStarted){
+       backupStarted=true;
+       // Onafhankelijke fallback op dezelfde stream, zonder extra cameraverzoek.
+       scanWithZXing(token).catch(()=>{if(scanActive&&token===scanLoopId)$('scanMessage').textContent='Houd de barcode goed scherp in het kader. Als lezen niet lukt, kies een barcodefoto.'});
       }
-      if(scanReader&&attempts%3===0){
-       const canvas=document.createElement('canvas');
-       canvas.width=video.videoWidth;canvas.height=video.videoHeight;
-       if(canvas.width&&canvas.height){
-        canvas.getContext('2d',{willReadFrequently:true}).drawImage(video,0,0,canvas.width,canvas.height);
-        try{const decoded=scanReader.decodeFromCanvas(canvas);if(decoded&&foundBarcode(decoded.getText()))return}catch(e){}
-       }
-      }
-      // Try alternate crops/rotation only after several unsuccessful native frames.
-      // Throttle expensive passes so iPhone 15 / 15 Pro remain responsive.
-      if(attempts>=4&&time-lastExtra>=850){
+      if(attempts>=4&&time-lastExtra>=1000){
        lastExtra=time;
-       const frames=scanFrameVariants(video);
-       for(const frame of (attempts%2?frames.slice(0,2):frames.slice(2))){
+       for(const frame of scanFrameVariants(video).slice(0,2)){
         const extra=await detector.detect(frame);
         for(const hit of extra){if(foundBarcode(hit.rawValue))return}
        }
       }
-     }catch(e){}finally{busy=false}
+     }catch(e){
+      if(!backupStarted){backupStarted=true;scanWithZXing(token).catch(()=>{$('scanMessage').textContent='Camera werkt, maar automatisch lezen lukt niet. Kies eventueel een barcodefoto.'})}
+     }finally{busy=false}
     }
-    if(scanActive&&token===scanLoopId)requestAnimationFrame(loop)
+    if(scanActive&&token===scanLoopId)requestAnimationFrame(loop);
    };
-   requestAnimationFrame(loop);return;
+   requestAnimationFrame(loop);
   }
-  await scanWithZXing();
-  $('scanMessage').textContent='Houd de barcode binnen het groene kader. Beweeg langzaam dichterbij of verder weg. Draai de verpakking bij reflecties.';
-  $('status').textContent='Camera actief — barcode wordt automatisch gezocht.';
- }catch(e){stopBarcodeCamera();$('status').textContent='Scannen lukt niet: '+e.message+'. Probeer een barcodefoto of handmatige invoer.'}
- finally{btn.disabled=false}
+ }catch(e){
+  stopBarcodeCamera();
+  const name=e?.name||'';
+  const explanation=name==='NotAllowedError'||name==='PermissionDeniedError'?'Cameratoegang geweigerd. Sta de camera toe in de iPhone-instellingen voor Safari of deze webapp.':name==='NotFoundError'?'Geen camera gevonden.':name==='NotReadableError'?'De camera is in gebruik door een andere app. Sluit die app en probeer opnieuw.':(e?.message||'Onbekende camerafout');
+  $('status').textContent='Scannen lukt niet: '+explanation+' Je kunt ook een barcodefoto kiezen of de cijfers invoeren.';
+ }finally{btn.disabled=false}
 };
 document.addEventListener('visibilitychange',()=>{if(document.hidden&&scanActive)stopBarcodeCamera()});
 $('supermarketUrlBtn').onclick=async()=>{const url=$('supermarketUrl').value.trim();if(!url){$('status').textContent='Plak eerst een productlink van AH of Jumbo.';return}const btn=$('supermarketUrlBtn');btn.disabled=true;$('status').textContent='Productpagina ophalen…';try{const r=await fetch('/api/store-product?url='+encodeURIComponent(url));const d=await r.json();if(!r.ok||!d.product)throw Error(d.error||'Productgegevens niet gevonden');$('status').textContent='Product gevonden bij '+d.product.store+'. Controleer de waarden op de verpakking.';choose(d.product)}catch(e){$('status').textContent='Niet automatisch uit te lezen: '+e.message+' Je kunt het product handmatig toevoegen.'}finally{btn.disabled=false}};
