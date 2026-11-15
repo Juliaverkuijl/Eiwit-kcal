@@ -2202,5 +2202,11 @@ function setup(){
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup();
 })();
 </script>
+
+<script id="eiwitOfflineRegister">
+if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost')){
+ window.addEventListener('load',()=>{navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(err=>console.warn('Offline registratie niet gelukt',err));});
+}
+</script>
 </body></html>
 
