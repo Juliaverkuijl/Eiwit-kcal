@@ -2092,7 +2092,11 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   function today(){return typeof localDate==='function'?localDate():new Date().toLocaleDateString('sv-SE')}
   function label(){
    const date=day();
-   title.textContent=(date===today()?'Vandaag · ':'')+new Date(date+'T12:00:00').toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'});
+   // Houd het echte datumveld in het label: textContent op het label verwijderde het input-element.
+   const dateText=(date===today()?'Vandaag · ':'')+new Date(date+'T12:00:00').toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'});
+   let caption=title.querySelector('#dashboardDateCaption');
+   if(!caption){caption=document.createElement('span');caption.id='dashboardDateCaption';title.insertBefore(caption,picker)}
+   caption.textContent=dateText;
    picker.value=date;picker.max=today();next.disabled=date>=today();
    const locked=typeof isDayLocked==='function'&&isDayLocked(date);
    closeBtn.textContent=locked?'🔓 Dag heropenen':'🔒 Dag afsluiten';
@@ -2109,6 +2113,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
   prev.addEventListener('click',()=>step(-1));next.addEventListener('click',()=>step(1));
   // De datumkiezer ligt als echt iOS-dateveld over het datumlabel; een synthetische klik werkt niet betrouwbaar in Safari.
   picker.addEventListener('change',()=>navigate(picker.value));
+  title.addEventListener('click',(e)=>{if(e.target===picker)return;try{picker.showPicker()}catch(_){picker.focus()}});
   closeBtn.addEventListener('click',()=>{
    if(typeof isDayLocked!=='function'||typeof setDayLock!=='function')return;
    const locked=isDayLocked(day());
