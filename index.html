@@ -1197,6 +1197,31 @@ function showSuggestions(){
 }
 
 let scanStream=null,scanActive=false,scanControls=null,scanReader=null,scanTorchOn=false,scanZoomStep=0,scanLoopId=0;
+// Maak uitsneden van het actuele camerabeeld voor lastige, kleine of gedraaide EAN-codes.
+// In vorige versie ontbrak deze functie, waardoor de extra scanpogingen faalden.
+function scanFrameVariants(video){
+ const w=video.videoWidth,h=video.videoHeight;
+ if(!w||!h)return [];
+ const out=[];
+ const crop=(sx,sy,sw,sh,rotation=0)=>{
+  const canvas=document.createElement('canvas');
+  const wide=rotation%180===0;
+  const targetW=Math.min(1400,Math.max(480,Math.round(sw*1.4)));
+  const targetH=Math.min(1100,Math.max(240,Math.round(sh*1.4)));
+  canvas.width=wide?targetW:targetH;canvas.height=wide?targetH:targetW;
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  if(!ctx)return;
+  ctx.save();ctx.translate(canvas.width/2,canvas.height/2);ctx.rotate(rotation*Math.PI/180);
+  ctx.drawImage(video,sx,sy,sw,sh,-targetW/2,-targetH/2,targetW,targetH);
+  ctx.restore();out.push(canvas);
+ };
+ crop(w*.08,h*.25,w*.84,h*.5);
+ crop(w*.20,h*.34,w*.60,h*.32);
+ crop(w*.10,h*.12,w*.80,h*.76,90);
+ crop(w*.10,h*.12,w*.80,h*.76,270);
+ return out;
+}
+
 function scannerTrack(){return scanStream?.getVideoTracks()?.[0]||$('scanVideo')?.srcObject?.getVideoTracks()?.[0]||null}
 function scannerControls(){const t=scannerTrack(),cap=t?.getCapabilities?.()||{};const torch=$('scanTorch'),zoom=$('scanZoom');torch.hidden=!cap.torch;zoom.hidden=!cap.zoom;if(!cap.torch)scanTorchOn=false;if(!cap.zoom)scanZoomStep=0}
 $('scanTorch').onclick=async()=>{const t=scannerTrack();if(!t)return;try{scanTorchOn=!scanTorchOn;await t.applyConstraints({advanced:[{torch:scanTorchOn}]});$('scanTorch').textContent=scanTorchOn?'🔦 Lamp uit':'🔦 Lamp aan'}catch(e){scanTorchOn=false;$('scanMessage').textContent='Zaklamp wordt niet ondersteund op dit toestel.'}};
@@ -1301,12 +1326,33 @@ $('scanBtn').onclick=async()=>{
       const hits=await detector.detect(video);
       for(const hit of hits){if(foundBarcode(hit.rawValue))return}
       attempts++;
+      // Onafhankelijke ZXing-backup: iOS' eigen detector mist soms EAN-streepjescodes.
+      // Laad één keer op de achtergrond en scan met dezelfde camerastream.
+      if(attempts===3&&!scanReader){
+       loadZXing().then(()=>{
+        if(!scanActive||token!==scanLoopId||scanReader)return;
+        const hints=new Map();
+        if(ZXing.DecodeHintType&&ZXing.BarcodeFormat){
+         hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E]);
+         hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
+        }
+        scanReader=new ZXing.BrowserMultiFormatReader(hints,180);
+       }).catch(()=>{});
+      }
+      if(scanReader&&attempts%3===0){
+       const canvas=document.createElement('canvas');
+       canvas.width=video.videoWidth;canvas.height=video.videoHeight;
+       if(canvas.width&&canvas.height){
+        canvas.getContext('2d',{willReadFrequently:true}).drawImage(video,0,0,canvas.width,canvas.height);
+        try{const decoded=scanReader.decodeFromCanvas(canvas);if(decoded&&foundBarcode(decoded.getText()))return}catch(e){}
+       }
+      }
       // Try alternate crops/rotation only after several unsuccessful native frames.
       // Throttle expensive passes so iPhone 15 / 15 Pro remain responsive.
       if(attempts>=4&&time-lastExtra>=850){
        lastExtra=time;
        const frames=scanFrameVariants(video);
-       for(const frame of frames){
+       for(const frame of (attempts%2?frames.slice(0,2):frames.slice(2))){
         const extra=await detector.detect(frame);
         for(const hit of extra){if(foundBarcode(hit.rawValue))return}
        }
