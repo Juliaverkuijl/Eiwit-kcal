@@ -1435,7 +1435,7 @@ function storeQueue(){localStorage.setItem(pendingKey,JSON.stringify(pending))}
 function operation(type,date,id,value){return {opId:uid(),type,date,id,value}}
 function diff(a,b){const ops=[];const ad=normalize(a?.diary),bd=normalize(b?.diary);for(const date of new Set([...Object.keys(ad),...Object.keys(bd)])){const old=ad[date]||{entries:[],closed:false},now=bd[date]||{entries:[],closed:false};const oldMap=new Map(old.entries.map(x=>[x.id,x])),newMap=new Map(now.entries.map(x=>[x.id,x]));for(const [id,x] of newMap)if(!oldMap.has(id)||JSON.stringify(oldMap.get(id))!==JSON.stringify(x))ops.push(operation('upsert',date,id,x));for(const id of oldMap.keys())if(!newMap.has(id))ops.push(operation('delete',date,id,null));if(old.closed!==now.closed)ops.push(operation('closed',date,'',now.closed))}if(JSON.stringify(a?.settings||{})!==JSON.stringify(b?.settings||{}))ops.push(operation('settings','','',b.settings));return ops}
 function applyOp(s,op){if(op.type==='settings'){s.settings=op.value;return}if(!validDate(op.date))return;const d=s.diary[op.date]||(s.diary[op.date]={entries:[],closed:false});if(op.type==='closed'){d.closed=!!op.value;return}if(op.type==='delete'){d.entries=d.entries.filter(x=>x.id!==op.id);if(op.date<'2026-11-11'&&d.entries.length===0)delete s.diary[op.date];return}if(op.type==='upsert'&&op.value&&op.id){const idx=d.entries.findIndex(x=>x.id===op.id);if(idx<0)d.entries.push({...op.value,id:op.id});else d.entries[idx]={...op.value,id:op.id}}}
-function applyState(s){syncSuppress=true;try{diary=normalize(s.diary);if(s.settings){$('limit').value=s.settings.limit??$('limit').value;$('kcalGoal').value=s.settings.kcalGoal??$('kcalGoal').value}localStorage.setItem(diaryKey,JSON.stringify(diary));localStorage.setItem(key,JSON.stringify({limit:$('limit').value,kcalGoal:$('kcalGoal').value}));loadDay();totals();if(!$('historyPage').hidden)renderHistory()}finally{syncSuppress=false}}
+function applyState(s){syncSuppress=true;try{diary=normalize(s.diary);if(s.settings){$('limit').value=s.settings.limit??$('limit').value;$('kcalGoal').value=s.settings.kcalGoal??$('kcalGoal').value}localStorage.setItem(diaryKey,JSON.stringify(diary));localStorage.setItem(key,JSON.stringify({limit:$('limit').value,kcalGoal:$('kcalGoal').value}));loadDay(window.eiwitBrowsingDate?currentDate:localDate());totals();window.eiwitRefreshDashboardDate?.();if(!$('historyPage').hidden)renderHistory()}finally{syncSuppress=false}}
 function scheduleSync(){if(!window.__juliaSyncBooted||syncSuppress||(!syncReady&&!syncToken))return;const now=state();if(!snapshot){snapshot=clone(now);localStorage.setItem(snapshotKey,JSON.stringify(snapshot));return}const ops=diff(snapshot,now);if(ops.length){ops.forEach(op=>familyOwn.add(op.opId));rememberFamilyOps();pending.push(...ops);storeQueue();snapshot=clone(now);localStorage.setItem(snapshotKey,JSON.stringify(snapshot))}if(syncReady){clearTimeout(syncTimer);syncTimer=setTimeout(syncCycle,350)}}
 async function requestDiary(method,body,after){const r=await fetch('/api/diary'+(method==='GET'?'?after='+encodeURIComponent(after||0):''),{method,headers:{'Authorization':'Bearer '+syncToken,'Content-Type':'application/json'},...(body?{body:JSON.stringify(body)}:{}) ,cache:'no-store'});const data=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(data.error||'Verbinding mislukt');e.status=r.status;throw e}return data}
 async function fetchDiaryChanges(initial){
@@ -2083,15 +2083,16 @@ function init(){
  const title=document.getElementById('dashboardDateTitle'),picker=document.getElementById('dashDateInput'),prev=document.getElementById('dashPrev'),next=document.getElementById('dashNext'),close=document.getElementById('dashboardCloseDay');
  if(!title||!picker||!prev||!next||!close)return;
  const today=()=>localDate();
- const fmtDate=d=>new Date(d+'T12:00:00').toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'});
- function refresh(){const d=currentDate;title.textContent=(d===today()?'Vandaag · ':'')+fmtDate(d);picker.value=d;picker.max=today();next.disabled=d>=today();const locked=isDayLocked(d);close.textContent=locked?'🔓 Dag heropenen':'🔒 Dag afsluiten';close.classList.toggle('locked',locked)}
- function select(d){if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d>today())return;window.eiwitBrowsingDate=d!==today();loadDay(d);totals();refresh()}
+ const format=d=>new Date(d+'T12:00:00').toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'});
+ function refresh(){const d=currentDate;title.textContent=(d===today()?'Vandaag · ':'')+format(d);picker.value=d;picker.max=today();next.disabled=d>=today();const locked=isDayLocked(d);close.textContent=locked?'🔓 Dag heropenen':'🔒 Dag afsluiten';close.classList.toggle('locked',locked)}
+ function select(d){if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d>today())return;window.eiwitBrowsingDate=d!==today();loadDay(d);totals();refresh();if(typeof renderPremiumDashboard==='function')renderPremiumDashboard();}
  function step(n){const d=new Date(currentDate+'T12:00:00');d.setDate(d.getDate()+n);select([d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'))}
- prev.onclick=()=>step(-1);next.onclick=()=>step(1);
- title.onclick=()=>{picker.value=currentDate;try{picker.showPicker()}catch(e){picker.focus();picker.click()}};
- picker.onchange=()=>select(picker.value);
- close.onclick=()=>{const locked=isDayLocked(currentDate);if(locked&&!confirm('Deze dag weer ontgrendelen?'))return;setDayLock(currentDate,!locked);refresh()};
+ prev.addEventListener('click',()=>step(-1));next.addEventListener('click',()=>step(1));
+ title.addEventListener('click',()=>{picker.value=currentDate;try{picker.showPicker()}catch(e){picker.focus();picker.click()}});
+ picker.addEventListener('change',()=>select(picker.value));
+ close.addEventListener('click',()=>{const locked=isDayLocked(currentDate);if(locked&&!confirm('Deze dag weer ontgrendelen?'))return;setDayLock(currentDate,!locked);refresh()});
  document.getElementById('navDashboard')?.addEventListener('click',refresh);
+ window.eiwitRefreshDashboardDate=refresh;
  refresh();
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
