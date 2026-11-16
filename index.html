@@ -2241,7 +2241,7 @@ if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostn
 .eiwit-cal-week{color:#a9b2ae;font-size:12px;font-weight:700;margin-bottom:8px}
 .eiwit-cal-days{gap:5px 0}
 .eiwit-cal-day{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;height:64px;border:0;border-radius:50%;background:transparent;color:white;font-size:17px}
-.eiwit-cal-day.is-closed:after{content:"";position:absolute;top:2px;right:5px;width:7px;height:7px;background:#40d98d;border-radius:50%;box-shadow:0 0 0 1px #153c2d}
+.eiwit-cal-day.is-closed:after{content:"";position:absolute;bottom:6px;left:50%;transform:translateX(-50%);width:7px;height:7px;background:#40d98d;border-radius:50%;box-shadow:0 0 0 1px #153c2d}
 .eiwit-cal-legend{margin-top:12px;display:flex;justify-content:center;align-items:center;gap:7px;font-size:12px;color:#c8d9cf}
 .eiwit-cal-legend-dot{width:8px;height:8px;border-radius:50%;background:#40d98d;display:inline-block}
 .eiwit-cal-day.selected{background:white;color:#101615;font-weight:800}
@@ -2264,7 +2264,7 @@ const iso=(y,m,d)=>[y,String(m+1).padStart(2,'0'),String(d).padStart(2,'0')].joi
 function overlay(){
  let el=document.getElementById('eiwitCalendarOverlay');if(el)return el;
  el=document.createElement('div');el.id='eiwitCalendarOverlay';el.hidden=true;
- el.innerHTML='<div class="eiwit-cal" role="dialog" aria-modal="true" aria-label="Selecteer datum"><div class="eiwit-cal-head"><strong id="eiwitCalMonth"></strong><div><button type="button" id="eiwitCalPrev" aria-label="Vorige maand">‹</button> <button type="button" id="eiwitCalNext" aria-label="Volgende maand">›</button></div></div><div class="eiwit-cal-week"><span>MA</span><span>DI</span><span>WO</span><span>DO</span><span>VR</span><span>ZA</span><span>ZO</span></div><div class="eiwit-cal-days" id="eiwitCalDays"></div><div class="eiwit-cal-legend"><span class="eiwit-cal-legend-dot"></span> Groene stip = afgesloten · cijfers = eiwit (g) en kcal (k) nog over; + = boven doel</div><div class="eiwit-cal-actions"><button type="button" id="eiwitCalCancel">Sluiten</button><button type="button" id="eiwitCalToday">Vandaag</button></div></div>';
+ el.innerHTML='<div class="eiwit-cal" role="dialog" aria-modal="true" aria-label="Selecteer datum"><div class="eiwit-cal-head"><strong id="eiwitCalMonth"></strong><div><button type="button" id="eiwitCalPrev" aria-label="Vorige maand">‹</button> <button type="button" id="eiwitCalNext" aria-label="Volgende maand">›</button></div></div><div class="eiwit-cal-week"><span>MA</span><span>DI</span><span>WO</span><span>DO</span><span>VR</span><span>ZA</span><span>ZO</span></div><div class="eiwit-cal-days" id="eiwitCalDays"></div><div class="eiwit-cal-legend"><span class="eiwit-cal-legend-dot"></span> Groene stip = dag afgesloten</div><div class="eiwit-cal-actions"><button type="button" id="eiwitCalCancel">Sluiten</button><button type="button" id="eiwitCalToday">Vandaag</button></div></div>';
  document.body.appendChild(el);
  el.addEventListener('click',e=>{if(e.target===el)el.hidden=true});
  el.querySelector('#eiwitCalCancel').onclick=()=>el.hidden=true;
@@ -2286,17 +2286,6 @@ function render(){
  const count=new Date(viewYear,viewMonth+1,0).getDate();
  for(let d=1;d<=count;d++){
   const date=iso(viewYear,viewMonth,d),b=document.createElement('button');b.type='button';b.className='eiwit-cal-day';const num=document.createElement('span');num.className='eiwit-cal-number';num.textContent=d;b.appendChild(num);
-  const rec=diary?.[date];if(rec&&Array.isArray(rec.entries)&&rec.entries.length){
-   const usedProtein=rec.entries.reduce((sum,x)=>sum+(Number(x.p)||0),0),usedKcal=rec.entries.reduce((sum,x)=>sum+(Number(x.k)||0),0);
-   const proteinGoal=Number(document.getElementById('limit')?.value)||21, kcalGoal=Number(document.getElementById('kcalGoal')?.value)||1500;
-   const pLeft=proteinGoal-usedProtein,kLeft=kcalGoal-usedKcal;
-   const remaining=document.createElement('span');remaining.className='eiwit-cal-remain';
-   const pText=(pLeft<0?'+':'')+Math.abs(pLeft).toLocaleString('nl-NL',{maximumFractionDigits:1})+'g';
-   const kText=(kLeft<0?'+':'')+Math.round(Math.abs(kLeft)).toLocaleString('nl-NL')+'k';
-   remaining.textContent=pText+' · '+kText;remaining.classList.toggle('over',pLeft<0||kLeft<0);
-   remaining.title=(pLeft<0?'Eiwit boven doel: ':'Eiwit nog: ')+Math.abs(pLeft).toFixed(1)+' g; '+(kLeft<0?'kcal boven doel: ':'kcal nog: ')+Math.abs(kLeft).toFixed(0);
-   b.appendChild(remaining);
-  }
   if(date===chosen)b.classList.add('selected');
   if(date===now)b.classList.add('today');
   if(diary?.[date]?.closed===true && Array.isArray(diary[date].entries) && diary[date].entries.length>0)b.classList.add('is-closed');
