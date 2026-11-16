@@ -2089,7 +2089,7 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 #dashboardPage .dashboardDateBar input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
 #dashboardPage .dashboardCloseRow{margin:7px 0 9px;display:flex;align-items:center;gap:7px}
 #dashboardPage .dashboardCloseRow button{width:100%;min-height:37px!important;padding:7px 12px!important;border-radius:10px!important;background:#0a7c45!important;color:white!important;font-weight:750!important;font-size:13px!important}
-#dashboardPage .dashboardCloseRow button.locked{background:#e5f4ea!important;color:#095b39!important;border:1px solid #a5d9b8!important}
+#dashboardPage .dashboardCloseRow button.locked{background:#c62828!important;color:#ffffff!important;border:1px solid #a51d1d!important}
 #dashboardPage #eiwitSyncMount #syncNotice{padding:6px 10px!important}
 #dashboardPage #eiwitSyncMount #syncDetails>summary{padding:5px 9px!important}
 #dashboardPage .eiwitHeroGrid{margin:5px 0!important}
@@ -2107,7 +2107,7 @@ function init(){
  if(!title||!picker||!prev||!next||!close)return;
  const today=()=>localDate();
  const format=d=>new Date(d+'T12:00:00').toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'});
- function refresh(){const d=currentDate;title.textContent=(d===today()?'Vandaag · ':'')+format(d);picker.value=d;picker.max=today();next.disabled=d>=today();const locked=isDayLocked(d);close.textContent=locked?'🔓 Dag heropenen':'🔒 Dag afsluiten';close.classList.toggle('locked',locked)}
+ function refresh(){const d=currentDate;title.textContent=(d===today()?'Vandaag · ':'')+format(d);picker.value=d;picker.max=today();next.disabled=d>=today();const locked=isDayLocked(d);close.textContent=locked?'🔒 Dag afgesloten · heropenen':'🔒 Dag afsluiten';close.classList.toggle('locked',locked)}
  function select(d){if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d>today())return;window.eiwitBrowsingDate=d!==today();loadDay(d);totals();refresh();if(typeof renderPremiumDashboard==='function')renderPremiumDashboard();}
  function step(n){const d=new Date(currentDate+'T12:00:00');d.setDate(d.getDate()+n);select([d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'))}
  prev.addEventListener('click',()=>step(-1));next.addEventListener('click',()=>step(1));
