@@ -2303,7 +2303,7 @@ function render(){
   if(date>now)b.disabled=true;
   b.onclick=()=>pick(date);days.appendChild(b);
  }
- e.querySelector('#eiwitCalNext').disabled=iso(viewYear,viewMonth,1)>iso(Number(now.slice(0,4)),Number(now.slice(5,7))-1,1)||viewYear===Number(now.slice(0,4))&&viewMonth===Number(now.slice(5,7))-1);
+ e.querySelector('#eiwitCalNext').disabled=iso(viewYear,viewMonth,1)>iso(Number(now.slice(0,4)),Number(now.slice(5,7))-1,1)||viewYear===Number(now.slice(0,4))&&viewMonth===Number(now.slice(5,7))-1;
 }
 window.eiwitOpenCalendar=function(){
  chosen=currentDate;const d=new Date(chosen+'T12:00:00');viewYear=d.getFullYear();viewMonth=d.getMonth();
