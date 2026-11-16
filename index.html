@@ -740,7 +740,7 @@ $('mealTrendStyle').addEventListener('change',()=>renderMealTrend(lastMealTrendS
 $('historyPeriod').addEventListener('change',renderHistory);
 $('historyFrom').addEventListener('change',renderHistory);
 $('historyTo').addEventListener('change',renderHistory);
-$('navToday').onclick=()=>showPage('today');$('navProducts').onclick=()=>showPage('products');$('navHistory').onclick=()=>showPage('history');$('navAnalysis').onclick=()=>showPage('analysis');$('navGrowth').onclick=()=>showPage('growth');$('closeDay').onclick=()=>{ensureDate();setDayLock(currentDate,!isDayLocked(currentDate));};$('exportData').onclick=()=>{persist();const blob=new Blob([JSON.stringify({version:1,diary,settings:{limit:$('limit').value,kcalGoal:$('kcalGoal').value},favorites,history},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='julia-voedingsdagboek-'+currentDate+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1500)};$('importButton').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{const obj=JSON.parse(await file.text());if(!obj.diary||typeof obj.diary!=='object'||Array.isArray(obj.diary))throw Error('Ongeldig bestand');if(!confirm('Back-up importeren? Bestaande dagen met dezelfde datum worden vervangen.'))return;for(const [date,day] of Object.entries(obj.diary)){if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Array.isArray(day.entries))continue;diary[date]={entries:day.entries,closed:!!day.closed}}if(obj.settings){$('limit').value=obj.settings.limit??$('limit').value;$('kcalGoal').value=obj.settings.kcalGoal??$('kcalGoal').value}if(Array.isArray(obj.favorites)){favorites=obj.favorites;localStorage.setItem(favKey,JSON.stringify(favorites))}if(Array.isArray(obj.history)){history=obj.history;localStorage.setItem(historyKey,JSON.stringify(history))}loadDay();totals();renderHistory();alert('Back-up geïmporteerd')}catch(err){alert('Importeren mislukt: '+err.message)}finally{e.target.value=''}};
+$('navToday').onclick=()=>showPage('today');$('navProducts').onclick=()=>showPage('products');$('navHistory').onclick=()=>showPage('history');$('navAnalysis').onclick=()=>showPage('analysis');$('navGrowth').onclick=()=>showPage('growth');$('closeDay').onclick=()=>{ensureDate();setDayLock(currentDate,!isDayLocked(currentDate));};$('exportData').onclick=()=>{persist();const blob=new Blob([JSON.stringify({version:1,diary,settings:{limit:$('limit').value,kcalGoal:$('kcalGoal').value},favorites,history},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='julia-voedingsdagboek-'+currentDate+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1500)};$('importButton').onclick=()=>$('importFile').click();$('importFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{const obj=JSON.parse(await file.text());if(!obj.diary||typeof obj.diary!=='object'||Array.isArray(obj.diary))throw Error('Ongeldig bestand');if(!confirm('Back-up importeren? Bestaande dagen met dezelfde datum worden vervangen.'))return;for(const [date,day] of Object.entries(obj.diary)){if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Array.isArray(day.entries))continue;diary[date]={entries:day.entries,closed:!!day.closed}}if(obj.settings){$('limit').value=obj.settings.limit??$('limit').value;$('kcalGoal').value=obj.settings.kcalGoal??$('kcalGoal').value}if(Array.isArray(obj.favorites)){favorites=obj.favorites;localStorage.setItem(favKey,JSON.stringify(favorites));window.juliaSharedChanged?.()}if(Array.isArray(obj.history)){history=obj.history;localStorage.setItem(historyKey,JSON.stringify(history));window.juliaSharedChanged?.()}loadDay();totals();renderHistory();alert('Back-up geïmporteerd')}catch(err){alert('Importeren mislukt: '+err.message)}finally{e.target.value=''}};
 // Gebruik alleen een expliciet vermeld verpakkingsformaat als automatische stukgrootte.
 // Voor drank is de voedingsbasis doorgaans per 100 ml; de huidige rekenmodule
 // gebruikt gram. Daarom is ml -> gram een benadering en wordt dit zichtbaar gemeld.
@@ -951,7 +951,7 @@ async function supplementByExactBarcode(p){
  }
 }
 
-function choose(p){if(editingTodayEntryId&&p.brand!=='Dagboek'){editingTodayEntryId=null;$('add').textContent='Toevoegen aan dagtotaal';}p=applyNutrientOverrides(p);if(/lekker vrij van gluten bruin/i.test(String(p.name||''))&&/jumbo/i.test(String(p.store||p.brand||''))&&!knownNutrient(p.sugar))p={...p,sugar:3.6};trackRecent(p);rememberProduct(p);if(typeof renderQuickProducts==='function')renderQuickProducts();hideSuggestions();$('results').replaceChildren();$('status').textContent='';$('query').value='';$('clearQuery').hidden=true;selected=p;updateSelectedFavorite();$('chosen').textContent=`${p.name} — ${p.brand||p.store} (${fmtProtein(p.protein)} g eiwit, ${fmt(p.kcal,0)} kcal /100 g)`;const pack=packageInfo(p);if(pack&&!verifiedPortionFromProduct(p)){$('chosen').textContent+=` · Verpakking ${fmt(pack.grams)} g = ${fmtProtein(pack.protein)} g eiwit`;}else if(verifiedPortionFromProduct(p)){$('chosen').textContent+=` · ${verifiedPortionFromProduct(p).source==='stuk'?'Stuk':'Portie'} ${fmt(verifiedPortionFromProduct(p).volumeMl||verifiedPortionFromProduct(p).grams,1)} ${verifiedPortionFromProduct(p).volumeMl?'ml':'g'}`;}const portion=p.portion;const estimate=estimatedPiece(p);const savedWeight=localStorage.getItem('stukgewicht:'+String(p.code||p.name).toLowerCase());const verified=verifiedPortionFromProduct(p);const actualPortion=verified||(portion?.verified===true?portion:null);const autoWeight=(smartNormalize(p.name)==='ontbijtkoek picnic'&&smartNormalize(p.brand)==='zelf ingevoerd')?26:(actualPortion?.grams??(savedWeight||((estimate&&/^Berekend:/.test(estimate.description))?estimate.grams:'')));const hasPieceWeight=Number(autoWeight)>0;$('mode').value=hasPieceWeight?'pieces':'grams';$('pieceBox').hidden=!hasPieceWeight;$('pieceWeight').value=hasPieceWeight?(verified?Number(autoWeight).toFixed(1):autoWeight):'';$('amount').value=hasPieceWeight?1:100;$('amountLabel').textContent=hasPieceWeight&&verified&&verified.source!=='stuk'?'Aantal porties':hasPieceWeight?'Aantal stuks':'Hoeveel gram?';$('nutritionBasis').hidden=false;const basis=$('nutritionBasis');basis.replaceChildren();const per100=document.createElement('div');const a=document.createElement('strong');a.textContent='Per 100 gram';const b=document.createElement('span');b.textContent=`${fmtProtein(p.protein)} g eiwit · ${fmt(p.kcal,0)} kcal`+[['fat','vet'],['sugar','suiker'],['carbs','koolhydraten']].filter(([key])=>knownNutrient(p[key])).map(([key,label])=>' · '+fmt(p[key],1)+' g '+label).join('');per100.append(a,b);basis.append(per100);$('source').textContent=verified?verified.description:portion?`Automatisch: ${fmt(portion.grams)} g per ${portion.source==='portie'?'portie':'stuk'}. ${portion.estimated?' Let op: ml is niet altijd gelijk aan gram.':''} Controleer de verpakking.`:savedWeight?'Zelf opgeslagen stukgewicht gebruikt. Controleer bij een andere verpakking.':estimate?estimate.description:'Geen onderbouwd gewicht per stuk gevonden. Vul dit zelf in.';$('nutrientMatches').replaceChildren();showSelectedNutrientInputs();calc();if(['fat','sugar','carbs'].every(k=>knownNutrient(p[k]))){$('nutrientLookupStatus').textContent='Alle vijf voedingswaarden uit hetzelfde productrecord beschikbaar ('+(p.nutritionSource||p.store||'productbron')+'). Controleer de verpakking.';}else{supplementByExactBarcode(p);}$('calculator').scrollIntoView({behavior:'smooth',block:'start'})}
+function choose(p){if(editingTodayEntryId&&p.brand!=='Dagboek'){editingTodayEntryId=null;$('add').textContent='Toevoegen aan dagtotaal';}p=applyNutrientOverrides(p);if(/lekker vrij van gluten bruin/i.test(String(p.name||''))&&/jumbo/i.test(String(p.store||p.brand||''))&&!knownNutrient(p.sugar))p={...p,sugar:3.6};trackRecent(p);rememberProduct(p);if(typeof renderQuickProducts==='function')renderQuickProducts();hideSuggestions();$('results').replaceChildren();$('status').textContent='';$('query').value='';$('clearQuery').hidden=true;selected=p;updateSelectedFavorite();$('chosen').textContent=`${p.name} — ${p.brand||p.store} (${fmtProtein(p.protein)} g eiwit, ${fmt(p.kcal,0)} kcal /100 g)`;const pack=packageInfo(p);if(pack&&!verifiedPortionFromProduct(p)){$('chosen').textContent+=` · Verpakking ${fmt(pack.grams)} g = ${fmtProtein(pack.protein)} g eiwit`;}else if(verifiedPortionFromProduct(p)){$('chosen').textContent+=` · ${verifiedPortionFromProduct(p).source==='stuk'?'Stuk':'Portie'} ${fmt(verifiedPortionFromProduct(p).volumeMl||verifiedPortionFromProduct(p).grams,1)} ${verifiedPortionFromProduct(p).volumeMl?'ml':'g'}`;}const portion=p.portion;const estimate=estimatedPiece(p);const savedWeight=localStorage.getItem('stukgewicht:'+String(p.code||p.name).toLowerCase());const verified=verifiedPortionFromProduct(p);const actualPortion=verified||(portion?.verified===true?portion:null);const autoWeight=(smartNormalize(p.name)==='ontbijtkoek picnic'&&smartNormalize(p.brand)==='zelf ingevoerd')?26:(actualPortion?.grams??(savedWeight||((estimate&&/^Berekend:/.test(estimate.description))?estimate.grams:'')));const hasPieceWeight=Number(autoWeight)>0;$('mode').value=hasPieceWeight?'pieces':'grams';$('pieceBox').hidden=!hasPieceWeight;$('pieceWeight').value=hasPieceWeight?(verified?Number(autoWeight).toFixed(1):autoWeight):'';$('amount').value=hasPieceWeight?1:100;if(/\bskittles\b/i.test(String(p.name||''))){$('mode').value='grams';$('amount').value=20;$('pieceBox').hidden=true;}$('amountLabel').textContent=$('mode').value==='grams'?'Hoeveel gram?':hasPieceWeight&&verified&&verified.source!=='stuk'?'Aantal porties':'Aantal stuks';$('nutritionBasis').hidden=false;const basis=$('nutritionBasis');basis.replaceChildren();const per100=document.createElement('div');const a=document.createElement('strong');a.textContent='Per 100 gram';const b=document.createElement('span');b.textContent=`${fmtProtein(p.protein)} g eiwit · ${fmt(p.kcal,0)} kcal`+[['fat','vet'],['sugar','suiker'],['carbs','koolhydraten']].filter(([key])=>knownNutrient(p[key])).map(([key,label])=>' · '+fmt(p[key],1)+' g '+label).join('');per100.append(a,b);basis.append(per100);$('source').textContent=verified?verified.description:portion?`Automatisch: ${fmt(portion.grams)} g per ${portion.source==='portie'?'portie':'stuk'}. ${portion.estimated?' Let op: ml is niet altijd gelijk aan gram.':''} Controleer de verpakking.`:savedWeight?'Zelf opgeslagen stukgewicht gebruikt. Controleer bij een andere verpakking.':estimate?estimate.description:'Geen onderbouwd gewicht per stuk gevonden. Vul dit zelf in.';$('nutrientMatches').replaceChildren();showSelectedNutrientInputs();calc();if(['fat','sugar','carbs'].every(k=>knownNutrient(p[k]))){$('nutrientLookupStatus').textContent='Alle vijf voedingswaarden uit hetzelfde productrecord beschikbaar ('+(p.nutritionSource||p.store||'productbron')+'). Controleer de verpakking.';}else{supplementByExactBarcode(p);}$('calculator').scrollIntoView({behavior:'smooth',block:'start'})}
 $('manualBasis').onchange=()=>{$('manualPortionBox').hidden=$('manualBasis').value!=='portion'};
 $('manualChoose').onclick=()=>{const parse=id=>Number(String($(id).value).replace(',','.'));const name=$('manualName').value.trim()||'Handmatig ingevoerd product';const protein=parse('manualProtein'),kcal=parse('manualKcal');const portionMode=$('manualBasis').value==='portion',weight=parse('manualPortion');if(['manualProtein','manualKcal'].every(id=>$(id).value.trim()==='')){$('manualError').textContent='Vul minimaal eiwit of calorieën in.';return}if(['manualProtein','manualKcal'].some(id=>$(id).value.trim()!==''&&(!Number.isFinite(parse(id))||parse(id)<0))){$('manualError').textContent='Controleer eiwit en calorieën.';return}if(['manualSugar','manualFat','manualCarbs'].some(id=>$(id).value.trim()!==''&&(!Number.isFinite(parse(id))||parse(id)<0))){$('manualError').textContent='Controleer suikers, vetten en koolhydraten.';return}if(portionMode&&(!Number.isFinite(weight)||weight<=0)){$('manualError').textContent='Vul het gewicht per stuk in om correct te rekenen.';return}$('manualError').textContent='';const factor=portionMode?100/weight:1;choose({name,brand:'Zelf ingevoerd',store:'Handmatig',protein:$('manualProtein').value.trim()===''?null:protein*factor,kcal:$('manualKcal').value.trim()===''?null:kcal*factor,...Object.fromEntries([['manualSugar','sugar'],['manualFat','fat'],['manualCarbs','carbs']].map(([id,k])=>[k,$(id).value.trim()===''?null:parse(id)*factor])),portion:portionMode?{grams:weight,source:'stuk'}:null});};
 $('manualFavorite').onclick=()=>{
@@ -1007,7 +1007,7 @@ if(!localStorage.getItem(picnicSeedKey)){
 }
 let quickTab='favorites';
 const productId=p=>String(p.store||'onbekend').toLocaleLowerCase('nl-NL')+'|'+String(p.id||p.productUrl||p.code||p.barcode||[p.name,p.brand].join('|')).toLocaleLowerCase('nl-NL');
-function trackRecent(p){const id=productId(p);recentProducts=[p,...recentProducts.filter(x=>productId(x)!==id)].slice(0,20);localStorage.setItem(recentProductsKey,JSON.stringify(recentProducts));renderQuickProducts()}
+function trackRecent(p){const id=productId(p);recentProducts=[p,...recentProducts.filter(x=>productId(x)!==id)].slice(0,20);localStorage.setItem(recentProductsKey,JSON.stringify(recentProducts));window.juliaSharedChanged?.();renderQuickProducts()}
 const favoriteMealKey='julia-favorite-meal-groups-v1';
 let favoriteMealGroups={};
 try{favoriteMealGroups=JSON.parse(localStorage.getItem(favoriteMealKey)||'{}')||{}}catch{}
@@ -1045,7 +1045,7 @@ function renderQuickProducts(){
    const meal=document.createElement('select');meal.className='favoriteMealSelect';meal.setAttribute('aria-label','Maaltijdgroep voor '+p.name);meal.title='Verplaats favoriet naar maaltijd';
    for(const [key,label] of Object.entries(favoriteMealNames)){const opt=document.createElement('option');opt.value=key;opt.textContent=label;meal.append(opt)}
    meal.value=favoriteMealGroup(p);
-   meal.onchange=()=>{favoriteMealGroups[productId(p)]=meal.value;localStorage.setItem(favoriteMealKey,JSON.stringify(favoriteMealGroups));renderQuickProducts()};actions.append(meal);
+   meal.onchange=()=>{favoriteMealGroups[productId(p)]=meal.value;localStorage.setItem(favoriteMealKey,JSON.stringify(favoriteMealGroups));window.juliaSharedChanged?.();renderQuickProducts()};actions.append(meal);
   }
   const star=document.createElement('button');star.type='button';star.className='starBtn';const isFav=explicitFavs.some(x=>productId(x)===productId(p));star.textContent=isFav?'★':'☆';star.title=isFav?'Verwijder favoriet':'Maak favoriet';star.onclick=()=>toggleFavorite(p);
   const b=document.createElement('button');b.type='button';b.textContent='Kies';b.onclick=()=>{choose(p);$('calculator').scrollIntoView({behavior:'smooth',block:'start'})};actions.append(star,b);row.append(t,actions);return row;
@@ -1059,7 +1059,7 @@ function renderQuickProducts(){
   }
  }else for(const p of arr)root.append(productRow(p));
 }
-function toggleFavorite(p){const id=productId(p);const found=explicitFavs.some(x=>productId(x)===id);explicitFavs=found?explicitFavs.filter(x=>productId(x)!==id):[p,...explicitFavs].slice(0,80);localStorage.setItem(explicitFavKey,JSON.stringify(explicitFavs));renderQuickProducts();if($('query').value.trim().length>=2)search();document.querySelectorAll('[data-fav-id]').forEach(b=>{if(b.dataset.favId===id)b.textContent=found?'☆':'★'});updateSelectedFavorite()}
+function toggleFavorite(p){const id=productId(p);const found=explicitFavs.some(x=>productId(x)===id);explicitFavs=found?explicitFavs.filter(x=>productId(x)!==id):[p,...explicitFavs].slice(0,80);localStorage.setItem(explicitFavKey,JSON.stringify(explicitFavs));window.juliaSharedChanged?.();renderQuickProducts();if($('query').value.trim().length>=2)search();document.querySelectorAll('[data-fav-id]').forEach(b=>{if(b.dataset.favId===id)b.textContent=found?'☆':'★'});updateSelectedFavorite()}
 $('quickFav').onclick=()=>{quickTab='favorites';renderQuickProducts()};$('quickRecent').onclick=()=>{quickTab='recent';renderQuickProducts()};
 $('addMealSelect').onchange=()=>{selectedMeal=$('addMealSelect').value};
 {const d=new Date(currentDate+'T12:00:00');d.setDate(d.getDate()-1);$('copySourceDate').value=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');$('copySourceDate').max=currentDate;}
@@ -1205,7 +1205,7 @@ async function search(){
 const popular=['B\'tween mueslireep','Hero B\'tween','between reep','ontbijtkoek','ontbijtgranen','ontbijtbiscuit','ontbijtrepen','Danoontje','Almhof yoghurt','yoghurt','kwark','melk','halfvolle melk','volle melk','kaas','jong belegen kaas','brood','volkoren brood','wit brood','beschuit','crackers','rijstwafels','banaan','appel','aardbeien','pasta','spaghetti','rijst','aardappelen','friet','kipfilet','gehakt','ei','eieren','komkommer','tomaat','paprika','wortel','mais','chocolade','koekjes','Sultana','rozijnen','vruchtenhagel','pindakaas','jam','appelmoes','vla','ijs','pizza','pannenkoeken','croissant','muesli','cornflakes','boter','margarine','honing','limonade','sap'];
 const historyKey='eiwitkcal-zoekgeschiedenis';let history=[];try{history=JSON.parse(localStorage.getItem(historyKey)||'[]');if(!Array.isArray(history))history=[]}catch{}
 const norm=s=>String(s).toLocaleLowerCase('nl-NL').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-function rememberSearch(q){history=[q,...history.filter(x=>norm(x)!==norm(q))].slice(0,30);try{localStorage.setItem(historyKey,JSON.stringify(history))}catch{}}
+function rememberSearch(q){history=[q,...history.filter(x=>norm(x)!==norm(q))].slice(0,30);try{localStorage.setItem(historyKey,JSON.stringify(history));window.juliaSharedChanged?.()}catch{}}
 const favKey='eiwitkcal-vaak-gekozen-v1';let favorites=[];
 try{favorites=JSON.parse(localStorage.getItem(favKey)||'[]');if(!Array.isArray(favorites))favorites=[]}catch{}
 function rememberProduct(p){
@@ -1214,7 +1214,7 @@ function rememberProduct(p){
  favorites=favorites.filter(x=>x.id!==id);
  favorites.unshift({id,product:p,count:(old?.count||0)+1,last:Date.now()});
  favorites=favorites.sort((a,b)=>b.count-a.count||b.last-a.last).slice(0,60);
- try{localStorage.setItem(favKey,JSON.stringify(favorites))}catch{}
+ try{localStorage.setItem(favKey,JSON.stringify(favorites));window.juliaSharedChanged?.()}catch{}
 }
 // Live productvoorstellen uit de voedingsdatabase, naast lokale favorieten en zoekgeschiedenis.
 const liveSuggestionCache=new Map();let liveSuggestionTimer=null,liveSuggestionRequest=0;
@@ -1693,7 +1693,7 @@ function showAddConfirmation(){
 </script><script>
 // Extra gedeelde gegevens. Onafhankelijk van het bestaande dagboekprotocol.
 (function(){
- const keys=['julia-nutrient-product-overrides-v1','julia-preferred-product-barcodes-v1','julia-growth-measurements-v1','julia-analysis-settings-v1','julia-growth-reference-v1'];
+ const keys=['julia-nutrient-product-overrides-v1','julia-preferred-product-barcodes-v1','julia-growth-measurements-v1','julia-analysis-settings-v1','julia-growth-reference-v1','julia-product-favorites-v1','julia-product-recent-v1','julia-favorite-meal-groups-v1','eiwitkcal-vaak-gekozen-v1','eiwitkcal-zoekgeschiedenis'];
  const queueKey='julia-shared-queue-v1',baseKey='julia-shared-base-v1';
  let queue=[],base={},busy=false,ready=false,lastError='';
  try{queue=JSON.parse(localStorage.getItem(queueKey)||'[]');if(!Array.isArray(queue))queue=[];queue=queue.filter(x=>keys.includes(x.key))}catch{queue=[]}
@@ -1729,7 +1729,8 @@ function showAddConfirmation(){
    if(k==='julia-growth-measurements-v1')growthMeasurements=Array.isArray(v)?v:[];
    if(k==='julia-analysis-settings-v1')analysisSettings=v||{};
    if(k==='julia-growth-reference-v1')growthReferences=Array.isArray(v)?v:[];
-   if(typeof renderQuickProducts==='function'&&(k.includes('favorites')||k.includes('recent')||k.includes('meal-groups')))renderQuickProducts();
+   if(typeof renderQuickProducts==='function'&&(k.includes('favorites')||k.includes('recent')||k.includes('meal-groups')||k==='eiwitkcal-vaak-gekozen-v1'))renderQuickProducts();
+   if(['julia-product-favorites-v1','julia-product-recent-v1','eiwitkcal-vaak-gekozen-v1','eiwitkcal-zoekgeschiedenis'].includes(k)&&typeof showSuggestions==='function'&&document.activeElement===document.getElementById('query'))showSuggestions();
    if(k==='julia-growth-measurements-v1'||k==='julia-growth-reference-v1')if(typeof renderGrowth==='function')renderGrowth();
    if(k==='julia-analysis-settings-v1'&&typeof renderAnalysis==='function')renderAnalysis();
   }catch(e){console.warn('Weergave vernieuwen:',e)}
@@ -1748,6 +1749,7 @@ function showAddConfirmation(){
   ready=true;lastError='';save();
  }catch(e){lastError=e.message;console.warn('Extra synchronisatie:',lastError)}finally{busy=false}}
  window.juliaRefreshShared=()=>cycle();
+ let changeTimer=null;window.juliaSharedChanged=()=>{if(!syncReady)return;clearTimeout(changeTimer);changeTimer=setTimeout(()=>cycle(),1300)};
  setInterval(()=>{if(syncReady)cycle()},60000);
  window.addEventListener('focus',()=>{if(syncReady)cycle()});
  document.addEventListener('visibilitychange',()=>{if(!document.hidden&&syncReady)cycle()});
@@ -2310,5 +2312,29 @@ window.eiwitOpenCalendar=function(){
   border:0!important;border-radius:0!important;
 }
 </style>
+<style id="compactPortionUpdate20261116">
+/* Eén duidelijk invoerveld; details alleen op verzoek. */
+#productPage #calculator .productNutrientTiles .nutrientSecondary{display:none!important}
+#productPage #calculator .productNutrientTiles{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+#productPage #calculator .compactProductExtras{margin-top:5px!important}
+#productPage #calculator .compactProductExtras>summary{padding:7px 2px!important}
+#productPage #calculator .compactExtraBody #piecePreview{display:none!important}
+#productPage #calculator .compactExtraBody #nutritionBasis{font-size:12px!important}
+#productPage #calculator .compactExtraBody #nutritionBasis>div{padding:6px!important}
+</style>
+<script id="compactPortionBehavior20261116">
+(function(){
+ function init(){
+  const chosen=document.getElementById('chosen'),extras=document.querySelector('#calculator .compactProductExtras');
+  if(!chosen||!extras)return;
+  let previous='';
+  new MutationObserver(()=>{
+   const name=chosen.textContent||'';
+   if(name!==previous){previous=name;extras.open=false;}
+  }).observe(chosen,{childList:true,subtree:true,characterData:true});
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
+})();
+</script>
 </body></html>
 
