@@ -517,7 +517,7 @@ function openTodayEntryInProducts(entry){
  calc();$('calculator').scrollIntoView({behavior:'smooth',block:'start'});
 }
 let lastRemovedEntry=null;function showUndoEntry(entry,index){lastRemovedEntry={entry:{...entry},index,date:currentDate};const b=$('undoEntryBar');if(b){b.hidden=false;$('undoEntryText').textContent='Verwijderd: '+entry.name+'.';}}function undoEntryRemoval(){if(!lastRemovedEntry)return;if(lastRemovedEntry.date!==currentDate||isDayLocked(currentDate)){alert('Open en ontgrendel eerst de juiste dag.');return;}if(entries.some(e=>e.id===lastRemovedEntry.entry.id)){lastRemovedEntry=null;$('undoEntryBar').hidden=true;return;}entries.splice(Math.min(lastRemovedEntry.index,entries.length),0,lastRemovedEntry.entry);lastRemovedEntry=null;$('undoEntryBar').hidden=true;persist();totals();}
-const mealExpanded={ochtend:false,middag:false,avond:false,overig:false};function renderMeals(){const root=$('mealSections');root.replaceChildren();for(const meal of meals){const list=entries.map((x,i)=>({...x,index:i})).filter(x=>(x.meal||'overig')===meal);if(meal==='overig'&&!list.length)continue;const sec=document.createElement('div');sec.className='meal';const head=document.createElement('button');head.type='button';head.className='mealhead';head.setAttribute('aria-expanded',String(mealExpanded[meal]));head.setAttribute('aria-label',mealNames[meal]+' in- of uitklappen');const ico=document.createElement('span');ico.className='mealicon';ico.textContent=({ochtend:'☀️',middag:'🥪',avond:'🌙',overig:'🍎'})[meal];const name=document.createElement('span');name.className='mealname';name.textContent=mealNames[meal];const val=document.createElement('span');val.className='mealvalues';val.textContent=fmtProtein(list.reduce((a,x)=>a+(Number(x.p)||0),0))+' g eiwit · '+fmt(list.reduce((a,x)=>a+(Number(x.k)||0),0),0)+' kcal';const chevron=document.createElement('span');chevron.className='mealchevron';chevron.textContent=mealExpanded[meal]?'⌃':'⌄';head.append(ico,name,val,chevron);sec.append(head);const body=document.createElement('div');body.className='mealbody';body.hidden=!mealExpanded[meal];head.onclick=()=>{mealExpanded[meal]=!mealExpanded[meal];body.hidden=!mealExpanded[meal];head.setAttribute('aria-expanded',String(mealExpanded[meal]));chevron.textContent=mealExpanded[meal]?'⌃':'⌄'};const items=document.createElement('div');items.className='mealitems';for(const x of list){const row=document.createElement('div');row.className='entry';const t=document.createElement('span');t.className='entryProductLink';t.setAttribute('role','button');t.tabIndex=0;t.title='Open product om voedingswaarden of hoeveelheid te wijzigen';t.setAttribute('aria-label','Wijzig '+x.name);t.append(document.createTextNode(`${x.name} · ${fmt(x.g)} g · `));const proteinBold=document.createElement('strong');proteinBold.textContent=`${fmtProtein(x.p)} g eiwit`;const kcalBold=document.createElement('strong');kcalBold.textContent=`${fmt(x.k,0)} kcal`;t.append(proteinBold,document.createTextNode(' · '),kcalBold,document.createTextNode(['sugar','fat','carbs'].map((key,i)=>knownNutrient(x[key])?' · '+['suiker','vet','koolhydraten'][i]+' '+fmt(x[key],1)+' g':'').join('')));t.onclick=()=>openTodayEntryInProducts(x);t.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openTodayEntryInProducts(x)}};const edit=document.createElement('button');edit.className='editEntry';edit.textContent='✎';edit.title='Hoeveelheid aanpassen';edit.setAttribute('aria-label','Bewerk '+x.name);edit.onclick=()=>{const original=entries[x.index];const oldG=Number(original.g);if(!(oldG>0)){alert('Dit product heeft geen geldige hoeveelheid en kan niet automatisch worden herberekend.');return}const raw=prompt('Nieuwe hoeveelheid in gram voor '+original.name+':',String(oldG).replace('.',','));if(raw===null)return;const newG=Number(raw.trim().replace(',','.'));if(!Number.isFinite(newG)||newG<=0){alert('Vul een hoeveelheid groter dan 0 gram in.');return}original.p=Number(original.p)*newG/oldG;original.k=Number(original.k)*newG/oldG;for(const key of ['sugar','fat','carbs'])if(knownNutrient(original[key]))original[key]=Number(original[key])*newG/oldG;original.g=newG;persist();totals()};const btn=document.createElement('button');btn.textContent='×';btn.setAttribute('aria-label','Verwijder '+x.name);btn.onclick=()=>{if(!confirm('Verwijder '+x.name+' uit '+mealNames[meal]+'?'))return;showUndoEntry(entries[x.index],x.index);entries.splice(x.index,1);persist();totals()};row.append(t,edit,btn);items.append(row)}body.append(items);if(meal!=='overig'){const add=document.createElement('button');add.className='mealadd';add.textContent='＋ Toevoegen aan '+mealNames[meal].toLowerCase();add.onclick=()=>{selectedMeal=meal;showPage('products');$('query').focus()};body.append(add)}sec.append(body);root.append(sec)}}
+const mealExpanded={ochtend:false,middag:false,avond:false,overig:false};function renderMeals(){const root=$('mealSections');root.replaceChildren();for(const meal of meals){const list=entries.map((x,i)=>({...x,index:i})).filter(x=>(x.meal||'overig')===meal);if(meal==='overig'&&!list.length)continue;const sec=document.createElement('div');sec.className='meal';const head=document.createElement('button');head.type='button';head.className='mealhead';head.setAttribute('aria-expanded',String(mealExpanded[meal]));head.setAttribute('aria-label',mealNames[meal]+' in- of uitklappen');const ico=document.createElement('span');ico.className='mealicon';ico.textContent=({ochtend:'☀️',middag:'🥪',avond:'🌙',overig:'🍎'})[meal];const name=document.createElement('span');name.className='mealname';name.textContent=mealNames[meal];const val=document.createElement('span');val.className='mealvalues';val.textContent=fmtProtein(list.reduce((a,x)=>a+(Number(x.p)||0),0))+' g eiwit · '+fmt(list.reduce((a,x)=>a+(Number(x.k)||0),0),0)+' kcal';const chevron=document.createElement('span');chevron.className='mealchevron';chevron.textContent=mealExpanded[meal]?'⌃':'⌄';head.append(ico,name,val,chevron);sec.append(head);const body=document.createElement('div');body.className='mealbody';body.hidden=!mealExpanded[meal];head.onclick=()=>{mealExpanded[meal]=!mealExpanded[meal];body.hidden=!mealExpanded[meal];head.setAttribute('aria-expanded',String(mealExpanded[meal]));chevron.textContent=mealExpanded[meal]?'⌃':'⌄'};const items=document.createElement('div');items.className='mealitems';for(const x of list){const row=document.createElement('div');row.className='entry';const t=document.createElement('span');t.className='entryProductLink';t.setAttribute('role','button');t.tabIndex=0;t.title='Open product om voedingswaarden of hoeveelheid te wijzigen';t.setAttribute('aria-label','Wijzig '+x.name);t.append(document.createTextNode(`${x.name} · ${fmt(x.g)} g · `));const proteinBold=document.createElement('strong');proteinBold.textContent=`${fmtProtein(x.p)} g eiwit`;const kcalBold=document.createElement('strong');kcalBold.textContent=`${fmt(x.k,0)} kcal`;t.append(proteinBold,document.createTextNode(' · '),kcalBold,document.createTextNode(''));t.onclick=()=>openTodayEntryInProducts(x);t.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openTodayEntryInProducts(x)}};const edit=document.createElement('button');edit.className='editEntry';edit.textContent='✎';edit.title='Hoeveelheid aanpassen';edit.setAttribute('aria-label','Bewerk '+x.name);edit.onclick=()=>{const original=entries[x.index];const oldG=Number(original.g);if(!(oldG>0)){alert('Dit product heeft geen geldige hoeveelheid en kan niet automatisch worden herberekend.');return}const raw=prompt('Nieuwe hoeveelheid in gram voor '+original.name+':',String(oldG).replace('.',','));if(raw===null)return;const newG=Number(raw.trim().replace(',','.'));if(!Number.isFinite(newG)||newG<=0){alert('Vul een hoeveelheid groter dan 0 gram in.');return}original.p=Number(original.p)*newG/oldG;original.k=Number(original.k)*newG/oldG;for(const key of ['sugar','fat','carbs'])if(knownNutrient(original[key]))original[key]=Number(original[key])*newG/oldG;original.g=newG;persist();totals()};const btn=document.createElement('button');btn.textContent='×';btn.setAttribute('aria-label','Verwijder '+x.name);btn.onclick=()=>{if(!confirm('Verwijder '+x.name+' uit '+mealNames[meal]+'?'))return;showUndoEntry(entries[x.index],x.index);entries.splice(x.index,1);persist();totals()};row.append(t,edit,btn);items.append(row)}body.append(items);if(meal!=='overig'){const add=document.createElement('button');add.className='mealadd';add.textContent='＋ Toevoegen aan '+mealNames[meal].toLowerCase();add.onclick=()=>{selectedMeal=meal;showPage('products');$('query').focus()};body.append(add)}sec.append(body);root.append(sec)}}
 function showPage(page){if(page!=='products'&&editingTodayEntryId){editingTodayEntryId=null;$('add').textContent='Toevoegen aan dagtotaal';}if(page!=='products'&&activeHistoricalDate()){clearHistoricalDate();$('add').textContent='Toevoegen aan dagtotaal';}ensureDate();$('todayPage').hidden=page!=='today';$('dashboardPage').hidden=page!=='dashboard';$('navDashboard').classList.toggle('active',page==='dashboard');document.getElementById('premiumDarkUI').disabled=page!=='dashboard';$('historyPage').hidden=page!=='history';$('navToday').classList.toggle('active',page==='today');$('navProducts').classList.toggle('active',page==='products');$('navHistory').classList.toggle('active',page==='history');$('productPage').hidden=page!=='products';$('analysisPage').hidden=page!=='analysis';$('growthPage').hidden=page!=='growth';$('navAnalysis').classList.toggle('active',page==='analysis');$('navGrowth').classList.toggle('active',page==='growth');if(page==='analysis')renderAnalysis();if(page==='growth')renderGrowth();if(page==='history')renderHistory();if(page==='products'){if($('addMealSelect'))$('addMealSelect').value=selectedMeal;if(typeof renderQuickProducts==='function')renderQuickProducts();}if(page==='products')$('productPage').scrollIntoView({behavior:'smooth',block:'start'});else window.scrollTo(0,0)}
 let analysisHistoryFocusDate=null;
 let historyTargetDate=null;
@@ -2111,7 +2111,7 @@ function init(){
  function select(d){if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d>today())return;window.eiwitBrowsingDate=d!==today();loadDay(d);totals();refresh();if(typeof renderPremiumDashboard==='function')renderPremiumDashboard();}
  function step(n){const d=new Date(currentDate+'T12:00:00');d.setDate(d.getDate()+n);select([d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'))}
  prev.addEventListener('click',()=>step(-1));next.addEventListener('click',()=>step(1));
- title.addEventListener('click',()=>{picker.value=currentDate;try{picker.showPicker()}catch(e){picker.focus()}});
+ title.addEventListener('click',()=>window.eiwitOpenCalendar?.());
  picker.addEventListener('change',()=>select(picker.value));
  close.addEventListener('click',()=>{const locked=isDayLocked(currentDate);if(locked&&!confirm('Deze dag weer ontgrendelen?'))return;setDayLock(currentDate,!locked);refresh()});
  document.getElementById('navDashboard')?.addEventListener('click',refresh);
@@ -2207,6 +2207,70 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 if('serviceWorker' in navigator && (location.protocol==='https:'||location.hostname==='localhost')){
  window.addEventListener('load',()=>{navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(err=>console.warn('Offline registratie niet gelukt',err));});
 }
+</script>
+
+<style id="eiwitFilledCalendarStyles">
+#dashDateInput{pointer-events:none!important;display:none!important}
+#eiwitCalendarOverlay{position:fixed;inset:0;z-index:99999;background:#0009;display:flex;align-items:center;justify-content:center;padding:18px}
+#eiwitCalendarOverlay[hidden]{display:none!important}
+.eiwit-cal{width:min(100%,390px);background:#252a29;color:#fff;border-radius:24px;padding:21px 18px 19px;box-shadow:0 16px 50px #0009;font-family:inherit}
+.eiwit-cal-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:20px}
+.eiwit-cal-head strong{font-size:19px}
+.eiwit-cal-head button,.eiwit-cal-actions button{border:0;border-radius:12px;padding:9px 13px;background:#39413e;color:white;font-size:19px}
+.eiwit-cal-week,.eiwit-cal-days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center}
+.eiwit-cal-week{color:#a9b2ae;font-size:12px;font-weight:700;margin-bottom:8px}
+.eiwit-cal-days{gap:5px 0}
+.eiwit-cal-day{position:relative;display:flex;align-items:center;justify-content:center;height:43px;border:0;border-radius:50%;background:transparent;color:white;font-size:17px}
+.eiwit-cal-day.has-food:after{content:"";position:absolute;bottom:1px;width:6px;height:6px;background:#40d98d;border-radius:50%}
+.eiwit-cal-day.selected{background:white;color:#101615;font-weight:800}
+.eiwit-cal-day.today:not(.selected){color:#6aaaff}
+.eiwit-cal-day:disabled{opacity:.24}
+.eiwit-cal-actions{display:flex;justify-content:space-between;margin-top:22px}
+.eiwit-cal-actions button:last-child{background:#298af2}
+</style>
+<script id="eiwitFilledCalendarScript">
+(function(){
+let viewYear,viewMonth,chosen;
+const names=['januari','februari','maart','april','mei','juni','juli','augustus','september','oktober','november','december'];
+const iso=(y,m,d)=>[y,String(m+1).padStart(2,'0'),String(d).padStart(2,'0')].join('-');
+function overlay(){
+ let el=document.getElementById('eiwitCalendarOverlay');if(el)return el;
+ el=document.createElement('div');el.id='eiwitCalendarOverlay';el.hidden=true;
+ el.innerHTML='<div class="eiwit-cal" role="dialog" aria-modal="true" aria-label="Selecteer datum"><div class="eiwit-cal-head"><strong id="eiwitCalMonth"></strong><div><button type="button" id="eiwitCalPrev" aria-label="Vorige maand">‹</button> <button type="button" id="eiwitCalNext" aria-label="Volgende maand">›</button></div></div><div class="eiwit-cal-week"><span>MA</span><span>DI</span><span>WO</span><span>DO</span><span>VR</span><span>ZA</span><span>ZO</span></div><div class="eiwit-cal-days" id="eiwitCalDays"></div><div class="eiwit-cal-actions"><button type="button" id="eiwitCalCancel">Sluiten</button><button type="button" id="eiwitCalToday">Vandaag</button></div></div>';
+ document.body.appendChild(el);
+ el.addEventListener('click',e=>{if(e.target===el)el.hidden=true});
+ el.querySelector('#eiwitCalCancel').onclick=()=>el.hidden=true;
+ el.querySelector('#eiwitCalPrev').onclick=()=>{if(viewMonth===0){viewMonth=11;viewYear--}else viewMonth--;render()};
+ el.querySelector('#eiwitCalNext').onclick=()=>{if(viewMonth===11){viewMonth=0;viewYear++}else viewMonth++;render()};
+ el.querySelector('#eiwitCalToday').onclick=()=>pick(localDate());
+ return el;
+}
+function pick(date){
+ const e=overlay();e.hidden=true;
+ const input=document.getElementById('dashDateInput');
+ if(input){input.value=date;input.dispatchEvent(new Event('change',{bubbles:true}))}
+}
+function render(){
+ const e=overlay(),days=e.querySelector('#eiwitCalDays');days.replaceChildren();
+ e.querySelector('#eiwitCalMonth').textContent=names[viewMonth]+' '+viewYear;
+ const now=localDate(),first=(new Date(viewYear,viewMonth,1).getDay()+6)%7;
+ for(let i=0;i<first;i++)days.appendChild(document.createElement('span'));
+ const count=new Date(viewYear,viewMonth+1,0).getDate();
+ for(let d=1;d<=count;d++){
+  const date=iso(viewYear,viewMonth,d),b=document.createElement('button');b.type='button';b.className='eiwit-cal-day';b.textContent=d;
+  if(date===chosen)b.classList.add('selected');
+  if(date===now)b.classList.add('today');
+  if(Array.isArray(diary?.[date]?.entries)&&diary[date].entries.length>0)b.classList.add('has-food');
+  if(date>now)b.disabled=true;
+  b.onclick=()=>pick(date);days.appendChild(b);
+ }
+ e.querySelector('#eiwitCalNext').disabled=iso(viewYear,viewMonth,1)>iso(Number(now.slice(0,4)),Number(now.slice(5,7))-1,1)||viewYear===Number(now.slice(0,4))&&viewMonth===Number(now.slice(5,7))-1);
+}
+window.eiwitOpenCalendar=function(){
+ chosen=currentDate;const d=new Date(chosen+'T12:00:00');viewYear=d.getFullYear();viewMonth=d.getMonth();
+ const e=overlay();render();e.hidden=false;
+};
+})();
 </script>
 </body></html>
 
