@@ -850,6 +850,11 @@ function verifiedPortionFromProduct(p){
  const name=String(p.name||'').toLocaleLowerCase('nl-NL');
  const store=String(p.store||p.brand||'').toLocaleLowerCase('nl-NL');
  const pack=packageInfo(p);
+ // Pepernoten AH: voorlopig gemiddeld 2 g per stuk. Bij 6 g eiwit/100 g
+ // is dit 0,12 g eiwit, afgerond 0,1 g. Het stukgewicht is een schatting.
+ if(/\bpepernoten\b/i.test(name)&&/albert heijn|\bah\b/i.test(store)){
+  return {grams:2,source:'stuk',approximate:true,description:'Ingesteld gemiddeld stukgewicht: 2 g per pepernoot (schatting). Bij 6 g eiwit/100 g is dit afgerond 0,1 g eiwit per stuk. Controleer door meerdere pepernoten samen te wegen.'};
+ }
  // Door gebruiker bevestigd stukgewicht voor Bounty 5x2 (Mars).
  if(/bounty\s*5\s*[x×]\s*2/i.test(name)&&/mars/.test(store))return {grams:28.5,source:'stuk',description:'Stukgewicht: 28,5 g (door gebruiker opgegeven). Controleer bij een andere verpakking.'};
  // Productinformatie Jumbo: 500 g verpakking, circa 12 porties.
