@@ -1412,7 +1412,7 @@ function loadZXing(){
  return window.__zxingLoadPromise;
 }
 let scanResultLocked=false;
-function foundBarcode(raw){const code=String(raw||'').replace(/\D/g,'');if(!/^\d{8,14}$/.test(code)||scanResultLocked)return false;scanResultLocked=true;$('barcodeManual').value=code;stopBarcodeCamera();lookupBarcode();return true}
+function foundBarcode(raw){const code=String(raw||'').replace(/\D/g,'');if(!/^\d{8,14}$/.test(code)||scanResultLocked)return false;scanResultLocked=true;$('barcodeManual').value=code;stopBarcodeCamera();$('status').textContent='Barcode '+code+' herkend. Product wordt opgezocht…';lookupBarcode();return true}
 // Simple independent html5-qrcode scanner: one library controls the camera.
 let simpleScanner=null;
 function loadSimpleScanner(){
@@ -1426,99 +1426,59 @@ function loadSimpleScanner(){
  return window.__simpleScannerLoad;
 }
 async function scanWithZXingFallback(token){
- // One camera, and exactly the same decodeFromImageUrl path as barcode photos.
+ // ZXing leest de videostream rechtstreeks. Geen PNG-data-URL per camerabeeld.
  await loadZXing();
  if(!scanActive||token!==scanLoopId)return false;
- const video=$('scanVideo');
- const holder=$('simpleBarcodeCamera');
+ const holder=$('simpleBarcodeCamera'),video=$('scanVideo');
  holder.hidden=true;video.hidden=false;
- const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}});
- if(!scanActive||token!==scanLoopId){stream.getTracks().forEach(t=>t.stop());return false}
- scanStream=stream;video.srcObject=stream;await video.play();scannerControls();
- const reader=new ZXing.BrowserMultiFormatReader();
+ const hints=new Map();
+ if(ZXing.DecodeHintType&&ZXing.BarcodeFormat){
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E,ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.ITF]);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
+ }
+ const reader=new ZXing.BrowserMultiFormatReader(hints,180);
  scanReader=reader;
- let frames=0;
- const canvas=document.createElement('canvas');
- const rotated=document.createElement('canvas');
- function frame(angle){
-  const w=video.videoWidth,h=video.videoHeight;
-  const scale=Math.min(1,1600/Math.max(w,h));
-  const W=Math.round(w*scale),H=Math.round(h*scale);
-  const target=angle?rotated:canvas;
-  target.width=angle?H:W;target.height=angle?W:H;
-  const ctx=target.getContext('2d',{willReadFrequently:true});
-  if(angle){ctx.translate(target.width/2,target.height/2);ctx.rotate(angle*Math.PI/180);ctx.drawImage(video,-W/2,-H/2,W,H)}
-  else ctx.drawImage(video,0,0,W,H);
-  return target;
- }
- async function loop(){
-  if(!scanActive||token!==scanLoopId||scanResultLocked)return;
-  try{
-   if(video.readyState>=2&&video.videoWidth){
-    frames++;
-    // First try iOS native detector when available.
-    if('BarcodeDetector' in window){
-     try{
-      if(!loop.detector){
-       const supported=await BarcodeDetector.getSupportedFormats();
-       const formats=['ean_13','ean_8','upc_a','upc_e','code_128'].filter(x=>supported.includes(x));
-       if(formats.length)loop.detector=new BarcodeDetector({formats});
-      }
-      if(loop.detector){for(const hit of await loop.detector.detect(frame(0))){if(foundBarcode(hit.rawValue))return}}
-     }catch(e){}
-    }
-    // Same ZXing method as the working barcode-photo button.
-    for(const angle of [0,90,270]){
-     if(!scanActive||token!==scanLoopId)return;
-     const image=frame(angle).toDataURL('image/png');
-     try{const result=await reader.decodeFromImageUrl(image);if(result&&foundBarcode(result.getText()))return}catch(e){}
-     finally{try{reader.reset()}catch(e){}}
-    }
-    $('scanMessage').textContent='Live herkenning: '+frames+' camerabeelden onderzocht. Barcode volledig in beeld houden.';
-   }
-  }catch(e){$('scanMessage').textContent='Scannerfout: '+(e?.message||String(e))}
-  if(scanActive&&token===scanLoopId&&!scanResultLocked)setTimeout(loop,180);
- }
- $('scanMessage').textContent='Camera actief — live barcodeherkenning gestart.';
- loop();
- return true;
-}
-// Live scan: direct frame decoding, zonder omzetting van elk camerabeeld naar een PNG-data-URL.
-async function scanWithZXing(token){
+ $('scanMessage').textContent='Camera starten — barcodeherkenning actief…';
  try{
-  await loadSimpleScanner();
-  if(!scanActive||token!==scanLoopId)return false;
-  const video=$('scanVideo'),holder=$('simpleBarcodeCamera');
-  video.hidden=true;holder.hidden=false;
-  const scanner=new Html5Qrcode('simpleBarcodeCamera',{verbose:false});
-  simpleScanner=scanner;
-  const formats=window.Html5QrcodeSupportedFormats;
-  const config={fps:12,qrbox:undefined,aspectRatio:1.777778,disableFlip:false};
-  if(formats)config.formatsToSupport=[formats.EAN_13,formats.EAN_8,formats.UPC_A,formats.UPC_E,formats.CODE_128,formats.ITF].filter(x=>x!==undefined);
-  await scanner.start({facingMode:'environment'},config,(decoded)=>{
-   if(scanActive&&token===scanLoopId)foundBarcode(decoded);
-  },()=>{});
-  if(!scanActive||token!==scanLoopId){try{await scanner.stop()}catch(e){};try{scanner.clear()}catch(e){};if(simpleScanner===scanner)simpleScanner=null;return false}
-  $('scanMessage').textContent='Camera actief — richt de volledige barcode op het beeld.';
+  const controls=await reader.decodeFromConstraints({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}},video,(result,error)=>{
+   if(result&&scanActive&&token===scanLoopId)foundBarcode(result.getText());
+  });
+  if(!scanActive||token!==scanLoopId){try{controls?.stop()}catch(e){};reader.reset();return false}
+  scanControls=controls;
+  scanStream=video.srcObject;
+  scannerControls();
+  $('scanMessage').textContent='Camera actief — houd de barcode scherp en volledig in beeld.';
   return true;
- }catch(err){
-  if(simpleScanner){const scanner=simpleScanner;simpleScanner=null;try{await scanner.stop()}catch(e){};try{scanner.clear()}catch(e){}}
+ }catch(e){try{reader.reset()}catch(_){};if(scanReader===reader)scanReader=null;throw e}
+}
+async function scanWithZXing(token){
+ // ZXing is de primaire live decoder; html5-qrcode is alleen een reserveoptie.
+ try{return await scanWithZXingFallback(token)}
+ catch(primaryError){
   if(!scanActive||token!==scanLoopId)return false;
   $('scanMessage').textContent='Alternatieve scanner starten…';
-  return scanWithZXingFallback(token);
+  await loadSimpleScanner();
+  if(!scanActive||token!==scanLoopId)return false;
+  const video=$('scanVideo'),holder=$('simpleBarcodeCamera');video.hidden=true;holder.hidden=false;
+  const scanner=new Html5Qrcode('simpleBarcodeCamera',{verbose:false});simpleScanner=scanner;
+  const f=window.Html5QrcodeSupportedFormats;
+  const config={fps:15,disableFlip:false,videoConstraints:{facingMode:'environment'}};
+  if(f)config.formatsToSupport=[f.EAN_13,f.EAN_8,f.UPC_A,f.UPC_E,f.CODE_128,f.ITF].filter(x=>x!==undefined);
+  await scanner.start({facingMode:'environment'},config,decoded=>{
+   if(scanActive&&token===scanLoopId)foundBarcode(decoded);
+  },()=>{});
+  if(!scanActive||token!==scanLoopId){try{await scanner.stop()}catch(e){};try{scanner.clear()}catch(e){};return false}
+  $('scanMessage').textContent='Camera actief — barcodeherkenning actief.';
+  return true;
  }
 }
 // Barcodefoto's worden alleen lokaal verwerkt; er wordt geen afbeelding geüpload.
 $('barcodePhotoBtn').onclick=()=>{$('barcodePhotoInput').click()};
 $('barcodeLibraryBtn').onclick=()=>{$('barcodeLibraryInput').click()};
-$('barcodeLibraryInput').addEventListener('change',e=>{
- const file=e.target.files?.[0];if(!file)return;
- try{const dt=new DataTransfer();dt.items.add(file);$('barcodePhotoInput').files=dt.files;$('barcodePhotoInput').dispatchEvent(new Event('change',{bubbles:true}))}
- catch(err){$('status').textContent='Foto kon niet worden overgenomen: '+err.message}
- e.target.value='';
-});
-$('barcodePhotoInput').addEventListener('change',async e=>{
- const file=e.target.files?.[0];e.target.value='';if(!file)return;
+$('barcodeLibraryInput').addEventListener('change',e=>processBarcodePhoto(e.target));
+$('barcodePhotoInput').addEventListener('change',e=>processBarcodePhoto(e.target));
+async function processBarcodePhoto(input){
+ const file=input.files?.[0];input.value='';if(!file)return;
  const status=$('status');
  const report=msg=>{status.textContent=msg;status.hidden=false;status.style.cssText='display:block!important;padding:12px;margin:10px 0;border:1px solid #a5d6c4;border-radius:10px;background:#eefaf5;color:#164f40;font-weight:650;white-space:normal';status.scrollIntoView({block:'nearest',behavior:'smooth'});};
  if(!file.type.startsWith('image/')){report('Kies een foto van een barcode.');return}
@@ -1556,11 +1516,19 @@ $('barcodePhotoInput').addEventListener('change',async e=>{
     await new Promise(resolve=>setTimeout(resolve,0));
    }
   }finally{try{reader.reset()}catch(e){}}
+  // Extra iPhone-fallback: html5-qrcode leest het originele bestand rechtstreeks.
+  try{
+   await loadSimpleScanner();
+   const holder=$('simpleBarcodeCamera');
+   const photoReader=new Html5Qrcode('simpleBarcodeCamera',{verbose:false});
+   try{const code=await photoReader.scanFile(file,false);if(foundBarcode(code))return}
+   finally{try{photoReader.clear()}catch(e){};holder.replaceChildren()}
+  }catch(e){}
   report('Barcode niet automatisch herkend. Probeer een scherpere foto, of vul hieronder de 13 cijfers in en druk op Opzoeken.');
   $('barcodeManual').scrollIntoView({block:'center',behavior:'smooth'});
  }catch(err){report('Fotoverwerking mislukt: '+(err?.message||String(err))+'. Vul de barcode eventueel handmatig in.')}
  finally{try{bitmap?.close()}catch(err){}}
-});
+}
 $('scanBtn').onclick=async()=>{
  if(scanActive){stopBarcodeCamera();return}
  scanResultLocked=false;scanActive=true;const token=++scanLoopId;
@@ -2644,7 +2612,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 /* De twee bovenste actieknoppen blijven; de dubbele knoppen zijn alleen visueel verborgen.
    De originele elementen blijven beschikbaar voor bestaande JavaScript-eventhandlers. */
 #productPage #scanBtn,
-#productPage #barcodeLibraryBtn { display:none!important; }
+#productPage #barcodeLibraryBtn,
+#productPage #barcodePhotoBtn { display:none!important; }
 </style>
 </body></html>
 
