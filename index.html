@@ -1420,7 +1420,7 @@ function loadSimpleScanner(){
  }).catch(e=>{window.__simpleScannerLoad=null;throw e});
  return window.__simpleScannerLoad;
 }
-async function scanWithZXing(token){
+async function scanWithZXingFallback(token){
  // One camera, and exactly the same decodeFromImageUrl path as barcode photos.
  await loadZXing();
  if(!scanActive||token!==scanLoopId)return false;
@@ -1477,6 +1477,31 @@ async function scanWithZXing(token){
  $('scanMessage').textContent='Camera actief — live barcodeherkenning gestart.';
  loop();
  return true;
+}
+// Live scan: direct frame decoding, zonder omzetting van elk camerabeeld naar een PNG-data-URL.
+async function scanWithZXing(token){
+ try{
+  await loadSimpleScanner();
+  if(!scanActive||token!==scanLoopId)return false;
+  const video=$('scanVideo'),holder=$('simpleBarcodeCamera');
+  video.hidden=true;holder.hidden=false;
+  const scanner=new Html5Qrcode('simpleBarcodeCamera',{verbose:false});
+  simpleScanner=scanner;
+  const formats=window.Html5QrcodeSupportedFormats;
+  const config={fps:12,qrbox:undefined,aspectRatio:1.777778,disableFlip:false};
+  if(formats)config.formatsToSupport=[formats.EAN_13,formats.EAN_8,formats.UPC_A,formats.UPC_E,formats.CODE_128,formats.ITF].filter(x=>x!==undefined);
+  await scanner.start({facingMode:'environment'},config,(decoded)=>{
+   if(scanActive&&token===scanLoopId)foundBarcode(decoded);
+  },()=>{});
+  if(!scanActive||token!==scanLoopId){try{await scanner.stop()}catch(e){};try{scanner.clear()}catch(e){};if(simpleScanner===scanner)simpleScanner=null;return false}
+  $('scanMessage').textContent='Camera actief — richt de volledige barcode op het beeld.';
+  return true;
+ }catch(err){
+  if(simpleScanner){const scanner=simpleScanner;simpleScanner=null;try{await scanner.stop()}catch(e){};try{scanner.clear()}catch(e){}}
+  if(!scanActive||token!==scanLoopId)return false;
+  $('scanMessage').textContent='Alternatieve scanner starten…';
+  return scanWithZXingFallback(token);
+ }
 }
 // Barcodefoto's worden alleen lokaal verwerkt; er wordt geen afbeelding geüpload.
 $('barcodePhotoBtn').onclick=()=>{$('barcodePhotoInput').click()};
@@ -2020,7 +2045,7 @@ const dash=$('dashboardPage'),mount=$('premiumDashboardMount'),sync=$('syncPanel
 if(dash&&mount){
  const statusMount=document.createElement('div');statusMount.id='eiwitSyncMount';dash.insertBefore(statusMount,mount);if(sync)statusMount.appendChild(sync);
  const hero=document.createElement('div');hero.className='eiwitHeroGrid';hero.innerHTML='<div class="eiwitHero" id="eiwitProteinHero"><div class="heroLabel">🍴 Eiwit</div><strong class="heroValue" id="eiwitProteinValue">0 g</strong><div class="heroGoal" id="eiwitProteinGoal">van 21,5 g</div><div class="heroBar"><i id="eiwitProteinBar"></i></div><div class="heroPercent" id="eiwitProteinPct">0%</div></div><div class="eiwitHero" id="eiwitKcalHero"><div class="heroLabel">🔥 Kcal</div><strong class="heroValue" id="eiwitKcalValue">0 kcal</strong><div class="heroGoal" id="eiwitKcalGoal">van 1.600 kcal</div><div class="heroBar"><i id="eiwitKcalBar"></i></div><div class="heroPercent" id="eiwitKcalPct">0%</div></div>';dash.insertBefore(hero,mount);
- const actions=document.createElement('div');actions.className='eiwitQuickActions';actions.innerHTML='<button type="button" data-action="add">＋ Product toevoegen / zoeken</button><button type="button" data-action="fav">☆ Favorieten</button><button type="button" data-action="recent">◷ Recent</button><button type="button" data-action="scan">▥ Barcode scannen</button><button type="button" data-action="photo">📷 Barcodefoto</button>';dash.insertBefore(actions,mount);
+ const actions=document.createElement('div');actions.className='eiwitQuickActions';actions.innerHTML='<button type="button" data-action="add">＋ Product toevoegen / zoeken</button><button type="button" data-action="scan">▥ Barcode scannen</button><button type="button" data-action="fav">☆ Favorieten</button><button type="button" data-action="recent">◷ Recent</button>';dash.insertBefore(actions,mount);
  actions.addEventListener('click',e=>{const btn=e.target.closest('button');if(!btn)return;const action=btn.dataset.action;$('navProducts')?.click();if(action==='scan'||action==='photo'){setTimeout(()=>{const id=action==='scan'?'scanBtn':'barcodePhotoBtn';$(id)?.click();if(action==='scan')$('scanArea')?.scrollIntoView({block:'nearest'});},120);return;}if(action==='fav'||action==='recent'){const quick=$('quickPanel');if(quick)quick.open=true;$(action==='fav'?'quickFav':'quickRecent')?.click();quick?.scrollIntoView({block:'center',behavior:'smooth'});}else{window.scrollTo({top:0,behavior:'instant'});}});
  const parse=t=>{const m=String(t||'').replace(/\s/g,'').replace(/\.(?=\d{3}(?:\D|$))/g,'').replace(',','.').match(/-?\d+(?:\.\d+)?/);return m?Number(m[0]):0};
  function update(){const pv=$('proteinBig')?.textContent||'0 g',kv=$('kcalBig')?.textContent||'0 kcal',p=parse(pv),k=parse(kv),pl=parse($('limit')?.value),kl=parse($('kcalGoal')?.value);const fmt=(n,d=0)=>n.toLocaleString('nl-NL',{maximumFractionDigits:d});for(const [kind,value,goal,unit,display] of [['Protein',p,pl,'g',pv],['Kcal',k,kl,'kcal',kv]]){const prefix='eiwit'+kind,pct=goal>0?Math.round(value/goal*100):0;const remaining=kind==='Protein'?Math.max(0,goal-value):Math.max(0,goal-value);const exceeded=kind==='Protein'&&goal>0&&value>goal;$(prefix+'Value').textContent=exceeded?'+'+fmt(value-goal,1)+' '+unit:fmt(remaining,kind==='Protein'?1:0)+' '+unit;$(prefix+'Goal').textContent=fmt(value,kind==='Protein'?1:0)+' '+unit+' gegeten · doel '+fmt(goal,kind==='Protein'?1:0)+' '+unit;$(prefix+'Pct').textContent=goal>0?pct+'%':'Geen doel';$(prefix+'Hero').classList.toggle('heroRemainingOver',exceeded);$(prefix+'Hero').classList.toggle('heroRemainingMet',kind==='Kcal'&&goal>0&&value>=goal);$(prefix+'Bar').style.width=Math.max(0,Math.min(100,pct))+'%';$(prefix+'Hero').style.setProperty('--ring-progress',Math.max(0,Math.min(100,pct))+'%');$(prefix+'Hero').classList.toggle('heroOver',kind==='Protein'&&goal>0&&value>goal);}}
@@ -2590,36 +2615,26 @@ if(store&&search&&store.previousElementSibling?.tagName==='LABEL'){
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
 </script>
-<style id="scannerShortcuts20261117">
-#dashboardPage #dashboardScanActions{display:grid!important;grid-template-columns:1fr 1fr;gap:9px;margin:10px 0 12px;visibility:visible!important;opacity:1!important}
-#dashboardScanActions button{display:block!important;width:100%;border:1px solid #b7dccc;border-radius:12px;padding:12px 6px;font-size:13px;font-weight:750;background:#e6f7ed;color:#075c43;min-height:46px}
-#productScanQuick2026{display:flex!important;gap:8px;align-items:center;margin:9px 0}
-#productScanQuick button{display:block!important;flex:1;background:#e7f5ed;color:#075c43;border:1px solid #bddccc;border-radius:10px;font-size:13px;padding:10px 5px;min-height:43px}
- .eiwitQuickActions button[data-action="scan"],.eiwitQuickActions button[data-action="photo"]{display:block!important;visibility:visible!important;opacity:1!important;min-height:48px;background:#e6f7ed!important;color:#075c43!important;border:1px solid #b7dccc!important} .eiwitQuickActions button[data-action="scan"]{grid-column:1 / -1} </style>
-<script id="scannerShortcutsLogic20261117">(function(){
-function init(){
- const dash=document.getElementById('dashboardPage');
- if(dash&&!document.getElementById('dashboardScanActions')){
-  const bar=document.createElement('div');bar.id='dashboardScanActions';
-  bar.innerHTML='<button type="button" id="dashboardScanBtn">▥ Barcode scannen</button><button type="button" id="dashboardPhotoBtn">📷 Barcodefoto</button>';
-  const actions=dash.querySelector('.eiwitQuickActions, .dashboardQuickActions, .eiwitHeroGrid, #eiwitKcalHero');
-  if(actions){actions.insertAdjacentElement('afterend',bar)}else{const date=document.getElementById('dashboardDateBar');if(date)date.insertAdjacentElement('afterend',bar);else dash.prepend(bar)}
-  function route(id){document.getElementById('navProducts')?.click();setTimeout(()=>{const target=document.getElementById(id);if(target){target.click()}else alert('Scannerknop niet gevonden');},100)}
-  document.getElementById('dashboardScanBtn').addEventListener('click',()=>route('scanBtn'));
-  document.getElementById('dashboardPhotoBtn').addEventListener('click',()=>route('barcodePhotoBtn'));
+
+<style id="finalDashboardActions20261117">
+#dashboardPage .eiwitQuickActions{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:9px!important;margin:8px 0 14px!important}
+#dashboardPage .eiwitQuickActions button{grid-column:auto!important;display:flex!important;justify-content:center;align-items:center;min-width:0;width:100%;min-height:46px!important;padding:8px 5px!important;white-space:normal!important;font-size:13px!important}
+#dashboardPage #dashboardScanActions{display:none!important}
+#dashboardPage .eiwitQuickActions button[data-action="photo"]{display:none!important}
+</style>
+<script id="finalDashboardActionsLogic20261117">(function(){function setup(){
+ const actions=document.querySelector('#dashboardPage .eiwitQuickActions');
+ if(actions){for(const name of ['add','scan','fav','recent']){const b=actions.querySelector('[data-action="'+name+'"]');if(b)actions.appendChild(b)}actions.querySelectorAll('[data-action="photo"]').forEach(b=>b.remove())}
+ document.querySelectorAll('#dashboardScanActions').forEach(el=>el.remove());
+ const page=document.getElementById('productPage');
+ if(page&&!document.getElementById('productScanQuick2026')){
+  const bar=document.createElement('div');bar.id='productScanQuick2026';bar.style.cssText='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:9px 0';
+  bar.innerHTML='<button type="button" id="productScanQuickBtn">▥ Barcode scannen</button><button type="button" id="productPhotoQuickBtn">📷 Barcodefoto</button>';
+  const anchor=document.getElementById('query')?.closest('.search');if(anchor)anchor.insertAdjacentElement('afterend',bar);else page.querySelector('.card')?.prepend(bar);
+  bar.querySelector('#productScanQuickBtn').addEventListener('click',()=>document.getElementById('scanBtn')?.click());
+  bar.querySelector('#productPhotoQuickBtn').addEventListener('click',()=>document.getElementById('barcodePhotoBtn')?.click());
  }
- const prod=document.getElementById('productPage');
- if(prod&&!document.getElementById('productScanQuick2026')){
-  const bar=document.createElement('div');bar.id='productScanQuick2026';
-  bar.innerHTML='<button type="button" id="productScanQuickBtn">▥ Barcode scannen</button><button type="button" id="productPhotoQuickBtn">📷 Foto maken</button>';
-  const search=document.getElementById('query');const card=prod.querySelector('section.card');
-  if(search){const holder=search.closest('.compactSearchActions')||search.parentElement;if(holder)holder.insertAdjacentElement('afterend',bar);else card?.prepend(bar)}else card?.prepend(bar);
-  document.getElementById('productScanQuickBtn').addEventListener('click',()=>{document.getElementById('scanBtn')?.click();document.getElementById('scanArea')?.scrollIntoView({block:'nearest'})});
-  document.getElementById('productPhotoQuickBtn').addEventListener('click',()=>document.getElementById('barcodePhotoBtn')?.click());
- }
-}
-if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
-})();</script></body></html>
+}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',setup,{once:true});else setup()})();</script></body></html>
 
 
 <style id="singlePortionInputFix20261116">
