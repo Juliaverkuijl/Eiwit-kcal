@@ -1391,7 +1391,7 @@ function scannerControls(){const t=scannerTrack(),cap=t?.getCapabilities?.()||{}
 $('scanTorch').onclick=async()=>{const t=scannerTrack();if(!t)return;try{scanTorchOn=!scanTorchOn;await t.applyConstraints({advanced:[{torch:scanTorchOn}]});$('scanTorch').textContent=scanTorchOn?'🔦 Lamp uit':'🔦 Lamp aan'}catch(e){scanTorchOn=false;$('scanMessage').textContent='Zaklamp wordt niet ondersteund op dit toestel.'}};
 $('scanZoom').onclick=async()=>{const t=scannerTrack(),z=t?.getCapabilities?.().zoom;if(!z)return;try{scanZoomStep=(scanZoomStep+1)%3;const level=Math.min(z.max,Math.max(z.min,scanZoomStep===0?1:scanZoomStep===1?1.5:2));await t.applyConstraints({advanced:[{zoom:level}]});$('scanZoom').textContent='🔍 Zoom '+level.toLocaleString('nl-NL')+'×'}catch(e){$('scanMessage').textContent='Zoom wordt niet ondersteund op dit toestel.'}};
 
-function stopBarcodeCamera(){if(simpleScanner){const scanner=simpleScanner;simpleScanner=null;Promise.resolve(scanner.stop()).catch(()=>{}).finally(()=>{try{scanner.clear()}catch(e){}})}scanActive=false;scanLoopId++;scanTorchOn=false;scanZoomStep=0;$('scanTorch').hidden=true;$('scanZoom').hidden=true;$('scanTorch').textContent='🔦 Lamp aan';$('scanZoom').textContent='🔍 Zoom 1×';if(scanControls){try{scanControls.stop()}catch(e){}scanControls=null}if(scanReader){try{scanReader.reset()}catch(e){}scanReader=null}if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null}const video=$('scanVideo');if(video){try{video.pause()}catch(e){}video.srcObject=null;video.hidden=true}const cameraHolder=$('simpleBarcodeCamera');if(cameraHolder)cameraHolder.hidden=false;$('scanArea').hidden=true;}
+function stopBarcodeCamera(){if(simpleScanner){const scanner=simpleScanner;simpleScanner=null;Promise.resolve(scanner.stop()).catch(()=>{}).finally(()=>{try{scanner.clear()}catch(e){}})}scanActive=false;scanLoopId++;scanTorchOn=false;scanZoomStep=0;$('scanTorch').hidden=true;$('scanZoom').hidden=true;$('scanTorch').textContent='🔦 Lamp aan';$('scanZoom').textContent='🔍 Zoom 1×';if(scanControls){try{scanControls.stop()}catch(e){}scanControls=null}if(scanReader){try{scanReader.reset()}catch(e){}scanReader=null}if(scanStream){scanStream.getTracks().forEach(t=>t.stop());scanStream=null}const video=$('scanVideo');if(video){try{video.pause()}catch(e){}video.srcObject=null;video.hidden=true}const cameraHolder=$('simpleBarcodeCamera');if(cameraHolder){cameraHolder.hidden=false;cameraHolder.replaceChildren()}$('scanArea').hidden=true;}
 async function lookupBarcode(){const code=$('barcodeManual').value.replace(/\D/g,'');if(!/^\d{8,14}$/.test(code)){$('status').textContent='Vul een barcode van 8 tot 14 cijfers in.';return}stopBarcodeCamera();$('status').textContent='Barcode opzoeken…';try{const r=await fetch('/api/barcode?code='+encodeURIComponent(code));const data=await r.json();if(!r.ok||!data.product)throw Error(data.error||'Product niet gevonden');choose(data.product);$('status').textContent='Product via barcode gevonden. '+(verifiedPortionFromProduct(selected)?'Per stuk staat automatisch op 1; controleer de inhoud en voedingswaarden.':'Stukgewicht niet betrouwbaar gevonden; vul de hoeveelheid zelf in.');}catch(e){$('status').textContent=e.message+' Je kunt het product ook handmatig zoeken.'}}
 $('barcodeLookup').onclick=lookupBarcode;$('barcodeManual').onkeydown=e=>{if(e.key==='Enter')lookupBarcode()};$('scanStop').onclick=stopBarcodeCamera;
 function loadZXing(){
@@ -1519,55 +1519,46 @@ $('barcodeLibraryInput').addEventListener('change',e=>{
 });
 $('barcodePhotoInput').addEventListener('change',async e=>{
  const file=e.target.files?.[0];e.target.value='';if(!file)return;
- if(!file.type.startsWith('image/')){$('status').textContent='Kies een foto van een barcode.';return}
- if(file.size>20*1024*1024){$('status').textContent='Foto is te groot (maximaal 20 MB).';return}
- stopBarcodeCamera();scanResultLocked=false;$('status').textContent='Barcodefoto analyseren…';
+ const status=$('status');
+ const report=msg=>{status.textContent=msg;status.hidden=false;status.style.cssText='display:block!important;padding:12px;margin:10px 0;border:1px solid #a5d6c4;border-radius:10px;background:#eefaf5;color:#164f40;font-weight:650;white-space:normal';status.scrollIntoView({block:'nearest',behavior:'smooth'});};
+ if(!file.type.startsWith('image/')){report('Kies een foto van een barcode.');return}
+ if(file.size>20*1024*1024){report('Foto te groot (maximaal 20 MB).');return}
+ stopBarcodeCamera();scanResultLocked=false;
+ report('Foto ontvangen. Barcode wordt nu gelezen…');
  let bitmap=null;
  try{
-  try{bitmap=await createImageBitmap(file)}catch(_){
-   const url=URL.createObjectURL(file);
-   try{bitmap=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(new Error('Afbeelding niet leesbaar'));img.src=url})}
-   finally{URL.revokeObjectURL(url)}
+  try{bitmap=await createImageBitmap(file)}
+  catch(_){const url=URL.createObjectURL(file);try{bitmap=await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(Error('Foto niet leesbaar'));img.src=url})}finally{URL.revokeObjectURL(url)}}
+  const maxSide=2200,scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
+  const base=document.createElement('canvas');base.width=Math.max(1,Math.round(bitmap.width*scale));base.height=Math.max(1,Math.round(bitmap.height*scale));
+  base.getContext('2d',{willReadFrequently:true}).drawImage(bitmap,0,0,base.width,base.height);
+  const regions=[base];
+  for(const [x,y,w,h] of [[.12,.20,.76,.60],[.20,.28,.60,.46],[0,.25,1,.5]]){
+   const c=document.createElement('canvas');c.width=Math.round(base.width*w);c.height=Math.round(base.height*h);
+   c.getContext('2d').drawImage(base,Math.round(base.width*x),Math.round(base.height*y),c.width,c.height,0,0,c.width,c.height);regions.push(c);
   }
-  const maxSide=2600, scale=Math.min(1,maxSide/Math.max(bitmap.width,bitmap.height));
-  const canvas=document.createElement('canvas');canvas.width=Math.round(bitmap.width*scale);canvas.height=Math.round(bitmap.height*scale);
-  const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(bitmap,0,0,canvas.width,canvas.height);
-  const regions=[canvas];
-  // Meerdere uitsneden helpen wanneer de barcode klein is op de verpakking.
-  for(const [x,y,w,h] of [[0,.2,1,.6],[.1,.05,.8,.9],[0,0,1,.5],[0,.5,1,.5]]){
-   const c=document.createElement('canvas');c.width=Math.round(canvas.width*w);c.height=Math.round(canvas.height*h);
-   c.getContext('2d').drawImage(canvas,Math.round(canvas.width*x),Math.round(canvas.height*y),c.width,c.height,0,0,c.width,c.height);regions.push(c)
-  }
-  // Probeer dezelfde foto in vier richtingen, ook als de streepjes schuin of gedraaid zijn.
-  const originals=regions.slice();
-  for(const region of originals){for(const angle of [90,180,270]){
-   const rotated=document.createElement('canvas');const quarter=angle===90||angle===270;
-   rotated.width=quarter?region.height:region.width;rotated.height=quarter?region.width:region.height;
-   const rc=rotated.getContext('2d');rc.translate(rotated.width/2,rotated.height/2);rc.rotate(angle*Math.PI/180);
-   rc.drawImage(region,-region.width/2,-region.height/2);regions.push(rotated);
-  }}
+  const rotate=(source,angle)=>{const c=document.createElement('canvas');const swap=angle===90||angle===270;c.width=swap?source.height:source.width;c.height=swap?source.width:source.height;const ctx=c.getContext('2d');ctx.translate(c.width/2,c.height/2);ctx.rotate(angle*Math.PI/180);ctx.drawImage(source,-source.width/2,-source.height/2);return c};
+  const candidates=[];
+  for(const region of regions)for(const angle of [0,90,270,180])candidates.push(angle?rotate(region,angle):region);
   if('BarcodeDetector' in window){
-   try{const supported=await BarcodeDetector.getSupportedFormats();const formats=['ean_13','ean_8','upc_a','upc_e','itf'].filter(x=>supported.includes(x));
-    if(formats.length){const detector=new BarcodeDetector({formats});for(const region of regions){const hits=await detector.detect(region);for(const hit of hits){if(foundBarcode(hit.rawValue))return}}}
+   try{const supported=await BarcodeDetector.getSupportedFormats();const formats=['ean_13','ean_8','upc_a','upc_e','code_128'].filter(f=>supported.includes(f));
+    if(formats.length){const detector=new BarcodeDetector({formats});for(const candidate of candidates){const hits=await detector.detect(candidate);for(const hit of hits){if(foundBarcode(hit.rawValue))return}}}
    }catch(err){}
   }
-  await loadZXing();const reader=new ZXing.BrowserMultiFormatReader();
+  report('Foto ontvangen. Extra barcodeherkenning wordt uitgevoerd…');
+  await loadZXing();
+  const reader=new ZXing.BrowserMultiFormatReader();
   try{
-   for(const region of regions){
-    for(const treatment of ['original','contrast']){
-     let target=region;
-     if(treatment==='contrast'){
-      target=document.createElement('canvas');target.width=region.width;target.height=region.height;
-      const c=target.getContext('2d',{willReadFrequently:true});c.drawImage(region,0,0);
-      const im=c.getImageData(0,0,target.width,target.height);for(let i=0;i<im.data.length;i+=4){const g=.299*im.data[i]+.587*im.data[i+1]+.114*im.data[i+2];const v=Math.max(0,Math.min(255,(g-128)*1.8+128));im.data[i]=im.data[i+1]=im.data[i+2]=v}c.putImageData(im,0,0)
-     }
-     const url=target.toDataURL('image/png');
-     try{const result=await reader.decodeFromImageUrl(url);if(result&&foundBarcode(result.getText()))return}catch(err){}
-    }
+   for(let i=0;i<candidates.length;i++){
+    const region=candidates[i];const url=region.toDataURL('image/png');
+    try{const result=await reader.decodeFromImageUrl(url);if(result&&foundBarcode(result.getText()))return}catch(err){}
+    if(i===7)report('Barcode wordt nog onderzocht. Dit kan enkele seconden duren…');
+    await new Promise(resolve=>setTimeout(resolve,0));
    }
-  }finally{try{reader.reset()}catch(err){}}
-  $('status').textContent='Barcode niet herkend. Maak een scherpe foto recht van voren, met de volledige streepjescode en cijfers zichtbaar. Of vul de cijfers handmatig in.';
- }catch(err){$('status').textContent='Foto lezen is niet gelukt: '+(err?.message||'onbekende fout')+'. Probeer een andere foto of voer de barcode handmatig in.'}
+  }finally{try{reader.reset()}catch(e){}}
+  report('Barcode niet automatisch herkend. Probeer een scherpere foto, of vul hieronder de 13 cijfers in en druk op Opzoeken.');
+  $('barcodeManual').scrollIntoView({block:'center',behavior:'smooth'});
+ }catch(err){report('Fotoverwerking mislukt: '+(err?.message||String(err))+'. Vul de barcode eventueel handmatig in.')}
  finally{try{bitmap?.close()}catch(err){}}
 });
 $('scanBtn').onclick=async()=>{
