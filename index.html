@@ -2647,6 +2647,8 @@ async function checkDailyBackup(){
   try{
     const r=await fetch('/api/backups',{headers:{Authorization:'Bearer '+token,Accept:'application/json'},cache:'no-store'});
     if(!r.ok)throw new Error('Back-upserver niet ingesteld ('+r.status+')');
+    const contentType=r.headers.get('content-type')||'';
+    if(!contentType.toLowerCase().includes('application/json'))throw new Error('Cloudflare geeft een webpagina terug in plaats van de back-up-API. Controleer de route /api/backups in je Worker.');
     const d=await r.json();
     if(!d.enabled||!Array.isArray(d.backups))throw new Error('Back-upserver nog niet ingericht');
     status().textContent=d.backups.length?'Laatste automatische back-up: '+new Date(d.backups[0].created).toLocaleString('nl-NL'):'Automatische back-ups zijn ingesteld, maar er is nog geen back-up gemaakt.';
