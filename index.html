@@ -1749,7 +1749,16 @@ function checkFamilyChanges(ops,initial){
 const syncStatus=t=>{const panel=$('syncPanel'),notice=$('syncNoticeText'),headline=$('syncHeadline');$('syncStatus').textContent=t;const checking=!!syncToken&&!syncReady&&!/niet geldig|ontkoppeld|Koppelen niet gelukt/i.test(t);panel.classList.remove('sync-connected','sync-disconnected','sync-checking');panel.classList.add(syncReady?'sync-connected':checking?'sync-checking':'sync-disconnected');$('syncIndicator').textContent=syncReady?'(gekoppeld)':checking?'(verbinding controleren)':'(niet gekoppeld)';const offline=!navigator.onLine;const failed=/niet beschikbaar|tijdelijk|fout|mislukt|error|ongeldig/i.test(t);const busy=/openen|controleren|synchroniseren|opgeslagen|koppelen|worden opgeslagen/i.test(t);headline.textContent=offline?'⚪ Offline · lokaal opgeslagen':syncReady?(failed?'🟠 Verbonden · syncprobleem':busy?'🔄 Verbonden · synchroniseren':'🟢 Verbonden met Marit · gesynchroniseerd'):checking?'🟠 Verbinding controleren':'🔴 Niet verbonden met Marit';notice.textContent=offline?'Geen internetverbinding. Wijzigingen blijven lokaal bewaard.':syncReady?(failed?'Tik voor details over synchronisatie.':busy?'Verbinding actief; gegevens worden bijgewerkt.':'Verbinding actief en dagboek bijgewerkt.'):checking?'Verbinding wordt gecontroleerd.':'Tik om te koppelen met Marit.';};
 const validDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s);
 function normalize(d){const out={};for(const [date,day] of Object.entries(d||{})){if(!validDate(date)||!day||!Array.isArray(day.entries))continue;const items=day.entries.filter(x=>x&&typeof x.name==='string').map((x,i)=>({...x,id:x.id||('legacy-'+date+'-'+i)}));if(date<'2026-11-11'&&items.length===0)continue;out[date]={closed:!!day.closed,entries:items}}return out}
-function state(){return {diary:normalize(diary),settings:{limit:$('limit').value,kcalGoal:$('kcalGoal').value,familySearch}}}
+// Send only compact searchable product facts to D1, never cached images or raw API payloads.
+const sharedProductFields=['name','brand','store','code','barcode','ean','gtin','protein','kcal','fat','sugar','carbs','satFat','unsatFat','fiber','salt','sodium','pieceWeight','unit','servingGrams','perPiece'];
+function compactFamilySearch(){
+ const terms=(familySearch.terms||[]).filter(x=>typeof x==='string').slice(0,35).map(x=>x.slice(0,90));
+ const products=(familySearch.products||[]).slice(0,55).map(p=>{const q={};for(const k of sharedProductFields)if(p[k]!==undefined&&p[k]!==null&&typeof p[k]!=='object')q[k]=typeof p[k]==='string'?p[k].slice(0,130):p[k];return q});
+ // A hard budget for the shared search settings; keep most recently used products.
+ while(products.length&&JSON.stringify({terms,products}).length>11000)products.pop();
+ return {terms,products};
+}
+function state(){return {diary:normalize(diary),settings:{limit:$('limit').value,kcalGoal:$('kcalGoal').value,familySearch:compactFamilySearch()}}}
 function storeQueue(){localStorage.setItem(pendingKey,JSON.stringify(pending))}
 function operation(type,date,id,value){return {opId:uid(),type,date,id,value}}
 function diff(a,b){const ops=[];const ad=normalize(a?.diary),bd=normalize(b?.diary);for(const date of new Set([...Object.keys(ad),...Object.keys(bd)])){const old=ad[date]||{entries:[],closed:false},now=bd[date]||{entries:[],closed:false};const oldMap=new Map(old.entries.map(x=>[x.id,x])),newMap=new Map(now.entries.map(x=>[x.id,x]));for(const [id,x] of newMap)if(!oldMap.has(id)||JSON.stringify(oldMap.get(id))!==JSON.stringify(x))ops.push(operation('upsert',date,id,x));for(const id of oldMap.keys())if(!newMap.has(id))ops.push(operation('delete',date,id,null));if(old.closed!==now.closed)ops.push(operation('closed',date,'',now.closed))}if(JSON.stringify(a?.settings||{})!==JSON.stringify(b?.settings||{}))ops.push(operation('settings','','',b.settings));return ops}
@@ -1770,11 +1779,26 @@ async function fetchDiaryChanges(initial){
  throw Error('Te veel wijzigingen tegelijk; probeer opnieuw');
 }
 async function syncCycle(){
+ // Old versions queued complete product objects, sometimes exceeding the server record limit.
+ // Rewrite ONLY unsent settings operations; never discard diary upserts or deletes.
+ let compacted=false;
+ for(const op of pending){if(op.type==='settings'&&JSON.stringify(op).length>11500){op.value={...op.value,familySearch:compactFamilySearch()};compacted=true}}
+ if(compacted)storeQueue();
  pending.forEach(op=>familyOwn.add(op.opId));rememberFamilyOps();
  if(!syncReady||syncBusy||!navigator.onLine)return;
  syncBusy=true;
  try{
-  if(pending.length){const batch=pending.slice(0,60);await requestDiary('POST',{ops:batch});const ids=new Set(batch.map(x=>x.opId));pending=pending.filter(x=>!ids.has(x.opId));storeQueue()}
+  if(pending.length){
+   // Bound requests by BOTH operation count and serialized bytes; 413 is retried with smaller batches.
+   let batch=[],bytes=12;
+   for(const op of pending){const n=JSON.stringify(op).length+1;if(batch.length&&(batch.length>=12||bytes+n>11500))break;batch.push(op);bytes+=n;}
+   let sent=false;
+   while(batch.length){
+    try{await requestDiary('POST',{ops:batch});sent=true;break}
+    catch(e){if((e.status===413||/registratie te groot|payload too large|request entity too large/i.test(e.message))&&batch.length>1){batch=batch.slice(0,Math.max(1,Math.floor(batch.length/2)));continue}throw e}
+   }
+   if(sent){const ids=new Set(batch.map(x=>x.opId));pending=pending.filter(x=>!ids.has(x.opId));storeQueue()}
+  }
   const base=await fetchDiaryChanges(false);
   const combined=clone(base);for(const op of pending)applyOp(combined,op);
   applyState(combined);snapshot=clone(state());localStorage.setItem(snapshotKey,JSON.stringify(snapshot));
