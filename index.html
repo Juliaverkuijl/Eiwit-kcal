@@ -1057,13 +1057,24 @@ function persistMatchedNutrients(p,source){
 function showSelectedNutrientInputs(){if(!selected)return;for(const [k,id] of Object.entries(extraInputIds))$(id).value=knownNutrient(selected[k])?Number(selected[k]).toFixed(1):'';}
 for(const [field,id] of Object.entries(extraInputIds))$(id).addEventListener('input',()=>{if(!selected)return;const raw=$(id).value.trim();if(raw!==''&&(!Number.isFinite(Number(raw))||Number(raw)<0))return;selected[field]=raw===''?null:Number(raw);const productKey=productId(selected);nutrientOverrides[productKey]={...(nutrientOverrides[productKey]||{}),[field]:selected[field]};localStorage.setItem(nutrientProductKey,JSON.stringify(nutrientOverrides));$('nutrientLookupStatus').textContent='Waarden aangepast. Controleer de verpakking.';refreshSelectedNutritionBasis();calc();});
 function nutrientName(v){return String(v||'').toLocaleLowerCase('nl-NL').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/&(?:#0*39|apos);/gi,"'").replace(/[^a-z0-9]+/g,' ').trim();}
+function nutritionValuesFromSource(match){
+ const n=match?.nutriments||{};
+ const pick=(...vals)=>vals.find(v=>knownNutrient(v));
+ return {
+  protein:pick(match?.protein,n.proteins_100g),kcal:pick(match?.kcal,n['energy-kcal_100g']),
+  fat:pick(match?.fat,n.fat_100g),sugar:pick(match?.sugar,n.sugars_100g),
+  carbs:pick(match?.carbs,n.carbohydrates_100g),satFat:pick(match?.satFat,n['saturated-fat_100g']),
+  unsatFat:pick(match?.unsatFat,n['unsaturated-fat_100g'],n['monounsaturated-fat_100g']!=null&&n['polyunsaturated-fat_100g']!=null?Number(n['monounsaturated-fat_100g'])+Number(n['polyunsaturated-fat_100g']):null),
+  fiber:pick(match?.fiber,n.fiber_100g),salt:pick(match?.salt,n.salt_100g),sodium:pick(match?.sodium,n.sodium_100g)
+ };
+}
 function fillFromNutrientMatch(p,match){
  if(selected!==p)return;
  savePreferredBarcode(p,match);
- const n=match.nutriments||{};const values={fat:n.fat_100g,sugar:n.sugars_100g,carbs:n.carbohydrates_100g,satFat:n['saturated-fat_100g'],unsatFat:n['unsaturated-fat_100g'],fiber:n.fiber_100g,salt:n.salt_100g,sodium:n.sodium_100g};
+ const values=nutritionValuesFromSource(match);
  let count=0;
  for(const [k,v] of Object.entries(values))if(!knownNutrient(p[k])&&knownNutrient(v)){p[k]=Number(v);count++;}
- if(count){const id=productId(p);nutrientOverrides[id]={...(nutrientOverrides[id]||{}),...Object.fromEntries(Object.entries(values).filter(([k,v])=>knownNutrient(p[k])).map(([k])=>[k,p[k]]))};localStorage.setItem(nutrientProductKey,JSON.stringify(nutrientOverrides));persistMatchedNutrients(p,'productmatch');}
+ if(count){const id=productId(p);nutrientOverrides[id]={...(nutrientOverrides[id]||{}),...Object.fromEntries(Object.entries(values).filter(([k,v])=>knownNutrient(p[k])).map(([k])=>[k,p[k]]))};localStorage.setItem(nutrientProductKey,JSON.stringify(nutrientOverrides));persistMatchedNutrients(p,'productmatch');try{rememberProduct(p);familyRememberProduct(p);}catch(_){} }
  $('nutrientLookupStatus').textContent=count?count+' waarde(n) per 100 g aangevuld. Controleer de verpakking.':'Geen aanvullende waarden beschikbaar.';
  $('nutrientMatches').replaceChildren();
  if(count){showSelectedNutrientInputs();refreshSelectedNutritionBasis();calc();updateExtraPortionNutrients();}
@@ -1074,7 +1085,7 @@ async function supplementByProductName(p){
  try{
   const q=String(p.name||'').slice(0,100);
   const url='/api/nutrient-matches?q='+encodeURIComponent(q);
-  let r=await fetch(url,{headers:{Accept:'application/json'}});if(!r.ok){r=await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=30&fields=code,product_name,brands,nutriments,quantity',{headers:{Accept:'application/json'}});if(!r.ok)throw Error('Bron niet bereikbaar');}
+  let r;try{r=await fetch(url,{headers:{Accept:'application/json'}});if(!r.ok)throw Error('Eigen bron niet bereikbaar');}catch(_){r=await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=30&fields=code,product_name,brands,nutriments,quantity',{headers:{Accept:'application/json'}});if(!r.ok)throw Error('Bron niet bereikbaar');}
   const data=await r.json();if(selected!==p)return;
   const candidates=(data.products||[]).filter(x=>{
    const n=x.nutriments||{};
@@ -1118,7 +1129,7 @@ async function supplementByExactBarcode(p){
   try{
    const response=await fetch('/api/barcode?code='+encodeURIComponent(barcode),{headers:{Accept:'application/json'}});
    if(!response.ok)throw Error('Eigen barcodebron niet bereikbaar');
-   const result=await response.json();match=result.product;
+   const result=await response.json();match={...(result.product||{}),...nutritionValuesFromSource(result.product)};
   }catch(err){
    const response=await fetch('https://world.openfoodfacts.org/api/v2/product/'+encodeURIComponent(barcode)+'.json?fields=code,product_name,brands,nutriments',{headers:{Accept:'application/json'}});
    if(!response.ok)throw err;
@@ -1134,7 +1145,7 @@ async function supplementByExactBarcode(p){
   if(selected!==p)return;
   let filled=0;
   for(const field of ['fat','sugar','carbs','satFat','unsatFat','fiber','salt','sodium'])if(!knownNutrient(p[field])&&knownNutrient(match[field])){p[field]=Number(match[field]);filled++;}
-  if(filled){persistMatchedNutrients(p,'barcode');showSelectedNutrientInputs();refreshSelectedNutritionBasis();calc();updateExtraPortionNutrients();$('nutrientLookupStatus').textContent=filled+' ontbrekende waarde(n) aangevuld via exacte barcode en opgeslagen op dit apparaat. Controleer het etiket.';}
+  if(filled){persistMatchedNutrients(p,'barcode');try{rememberProduct(p);familyRememberProduct(p);}catch(_){}showSelectedNutrientInputs();refreshSelectedNutritionBasis();calc();updateExtraPortionNutrients();$('nutrientLookupStatus').textContent=filled+' ontbrekende waarde(n) aangevuld via exacte barcode en opgeslagen op dit apparaat. Controleer het etiket.';}
   else {await supplementByProductName(p);}
  }catch(e){
   if(selected!==p)return;
