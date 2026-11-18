@@ -609,6 +609,7 @@ function totals(){updateTodayLock();let p=entries.reduce((s,x)=>s+(Number(x.p)||
 // krijgen alleen een stukweergave wanneer hun bekende 2 g/stuk schatting past.
 function entryPieceWeight(item){
  const w=Number(item?.pieceWeight);
+ if(/glutevrije bolletje/i.test(String(item?.name||'')))return 50;
  if(item?.entryUnit==='pieces'&&w>0)return w;
  if(!item?.entryUnit&&/\bpepernoten\b/i.test(String(item?.name||'')))return 2;
  return 0;
@@ -880,6 +881,9 @@ function verifiedPortionFromProduct(p){
  const name=String(p.name||'').toLocaleLowerCase('nl-NL');
  const store=String(p.store||p.brand||'').toLocaleLowerCase('nl-NL');
  const pack=packageInfo(p);
+ // Door gebruiker vastgesteld: één Glutevrije bolletje weegt 50 gram.
+ // Dit geldt ook voor dezelfde productnaam afkomstig uit het dagboek.
+ if(name.includes('glutevrije bolletje'))return {grams:50,source:'stuk',description:'Vast stukgewicht: 50 g per bolletje (door gebruiker opgegeven).'};
  // Pepernoten AH: voorlopig gemiddeld 2 g per stuk. Bij 6 g eiwit/100 g
  // is dit 0,12 g eiwit, afgerond 0,1 g. Het stukgewicht is een schatting.
  if(/\bpepernoten\b/i.test(name)&&/albert heijn|\bah\b/i.test(store)){
