@@ -1778,33 +1778,52 @@ async function fetchDiaryChanges(initial){
  }
  throw Error('Te veel wijzigingen tegelijk; probeer opnieuw');
 }
+// Protect D1 per-record limits as well as the total request size.
+function fitSyncOperation(op,level=0){
+ if(op.type==='settings'){
+  const value={...op.value};
+  const f=value.familySearch||{};
+  if(level===0)value.familySearch={terms:(f.terms||[]).slice(0,12),products:(f.products||[]).slice(0,8)};
+  else if(level===1)value.familySearch={terms:(f.terms||[]).slice(0,5),products:[]};
+  else delete value.familySearch;
+  return {...op,value};
+ }
+ if(op.type==='upsert'&&op.value&&level>0){
+  // Only send the fields used by the diary; preserve the original full entry locally.
+  const allowed=['id','name','g','p','k','meal','entryUnit','pieceWeight','pieceCount','offeredGrams','uneatenGrams','fat','sugar','carbs','satFat','unsatFat','fiber','salt','sodium'];
+  const value={};for(const k of allowed)if(op.value[k]!==undefined)value[k]=op.value[k];
+  return {...op,value};
+ }
+ return op;
+}
 async function syncCycle(){
- // Old versions queued complete product objects, sometimes exceeding the server record limit.
- // Rewrite ONLY unsent settings operations; never discard diary upserts or deletes.
- let compacted=false;
- for(const op of pending){if(op.type==='settings'&&JSON.stringify(op).length>11500){op.value={...op.value,familySearch:compactFamilySearch()};compacted=true}}
- if(compacted)storeQueue();
  pending.forEach(op=>familyOwn.add(op.opId));rememberFamilyOps();
  if(!syncReady||syncBusy||!navigator.onLine)return;
  syncBusy=true;
  try{
   if(pending.length){
-   // Bound requests by BOTH operation count and serialized bytes; 413 is retried with smaller batches.
-   let batch=[],bytes=12;
-   for(const op of pending){const n=JSON.stringify(op).length+1;if(batch.length&&(batch.length>=12||bytes+n>11500))break;batch.push(op);bytes+=n;}
-   let sent=false;
-   while(batch.length){
-    try{await requestDiary('POST',{ops:batch});sent=true;break}
-    catch(e){if((e.status===413||/registratie te groot|payload too large|request entity too large/i.test(e.message))&&batch.length>1){batch=batch.slice(0,Math.max(1,Math.floor(batch.length/2)));continue}throw e}
+   let count=Math.min(10,pending.length),level=0,sent=false,sentOps=[];
+   while(count>=1){
+    const ops=pending.slice(0,count).map(op=>fitSyncOperation(op,level));
+    const payload={ops};
+    if(JSON.stringify(payload).length>7500&&count>1){count=Math.max(1,Math.floor(count/2));continue}
+    try{await requestDiary('POST',payload);sent=true;sentOps=ops;break}
+    catch(e){
+     const tooLarge=e.status===413||/registratie te groot|payload too large|request entity too large/i.test(e.message);
+     if(!tooLarge)throw e;
+     if(count>1){count=Math.max(1,Math.floor(count/2));continue}
+     if(level<2){level++;continue}
+     throw new Error('Een enkele registratie wordt door de server geweigerd als te groot. Controleer de Cloudflare Worker /api/diary en D1-limiet. Lokale gegevens zijn behouden.');
+    }
    }
-   if(sent){const ids=new Set(batch.map(x=>x.opId));pending=pending.filter(x=>!ids.has(x.opId));storeQueue()}
+   if(sent){const ids=new Set(sentOps.map(x=>x.opId));pending=pending.filter(x=>!ids.has(x.opId));storeQueue()}
   }
   const base=await fetchDiaryChanges(false);
   const combined=clone(base);for(const op of pending)applyOp(combined,op);
   applyState(combined);snapshot=clone(state());localStorage.setItem(snapshotKey,JSON.stringify(snapshot));
   syncStatus(pending.length?'Wijzigingen worden opgeslagen':'Automatisch bijgewerkt');
  }catch(e){if(e.status===401){syncReady=false;syncStatus('Koppeling niet geldig. Eenmalig opnieuw koppelen.')}else syncStatus('Synchronisatie tijdelijk niet beschikbaar: '+e.message+' · gegevens bewaard op dit toestel')}
- finally{syncBusy=false;if(syncReady&&pending.length)setTimeout(syncCycle,1200)}
+ finally{syncBusy=false;if(syncReady&&pending.length)setTimeout(syncCycle,5000)}
 }
 window.juliaRefreshDiary=()=>syncCycle();
 async function initialSync(){
