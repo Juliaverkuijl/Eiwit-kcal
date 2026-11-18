@@ -2246,8 +2246,9 @@ if(dash&&mount){
  // Only when entering product search from the dashboard, preselect the meal by local clock.
  // The user can still change the meal manually before saving.
  if(action==='add'){
-   const hour=new Date().getHours();
-   const mealName=hour>=6&&hour<12?'Ochtend':hour>=12&&hour<18?'Middag':'Avond';
+   const now=new Date();
+   const minutes=now.getHours()*60+now.getMinutes();
+   const mealName=minutes>=6*60&&minutes<12*60?'Ochtend':minutes>=12*60&&minutes<17*60+30?'Middag':'Avond';
    const mealSelect=$('addMealSelect');
    if(mealSelect){
      const option=Array.from(mealSelect.options).find(o=>o.textContent.trim().toLowerCase().includes(mealName.toLowerCase())||o.value.toLowerCase()===mealName.toLowerCase());
