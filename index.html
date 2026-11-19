@@ -2815,9 +2815,14 @@ async function checkDailyBackup(){
   if(!token){status().textContent='Koppel eerst dit toestel met het gezamenlijke dagboek.';return;}
   try{
     const r=await fetch('/api/backups',{headers:{Authorization:'Bearer '+token,Accept:'application/json'},cache:'no-store'});
-    if(!r.ok)throw new Error('Back-upserver niet ingesteld ('+r.status+')');
-    const d=await r.json();
-    if(!d.enabled||!Array.isArray(d.backups))throw new Error('Back-upserver nog niet ingericht');
+    const contentType=(r.headers.get('content-type')||'').toLowerCase();
+    if(!contentType.includes('application/json')){
+      throw new Error('Cloudflare geeft geen back-upgegevens terug. De route /api/backups ontbreekt of verwijst naar de website. Automatische back-ups zijn niet bevestigd.');
+    }
+    let d;
+    try{d=await r.json()}catch(_){throw new Error('De back-upserver stuurde ongeldige JSON terug.');}
+    if(!r.ok)throw new Error((d&&typeof d.error==='string'?d.error:'Back-upserver niet beschikbaar')+' (HTTP '+r.status+').');
+    if(!d||!d.enabled||!Array.isArray(d.backups))throw new Error('Back-upserver of R2-opslag nog niet ingericht.');
     status().textContent=d.backups.length?'Laatste automatische back-up: '+new Date(d.backups[0].created).toLocaleString('nl-NL'):'Automatische back-ups zijn ingesteld, maar er is nog geen back-up gemaakt.';
     d.backups.slice(0,30).forEach(b=>{
       const a=document.createElement('a');
