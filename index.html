@@ -1075,40 +1075,36 @@ function fillFromNutrientMatch(p,match){
 }
 async function supplementByProductName(p){
  const holder=$('nutrientMatches');holder.replaceChildren();
- $('nutrientLookupStatus').textContent='Voedingswaarden per 100 gram zoeken…';
- try{
-  const q=String(p.name||'').slice(0,100);
-  const url='/api/nutrient-matches?q='+encodeURIComponent(q);
-  let r=await fetch(url,{headers:{Accept:'application/json'}});if(!r.ok){r=await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=30&fields=code,product_name,brands,nutriments,quantity',{headers:{Accept:'application/json'}});if(!r.ok)throw Error('Bron niet bereikbaar');}
-  const data=await r.json();if(selected!==p)return;
-  const candidates=(data.products||[]).filter(x=>{
-   const n=x.nutriments||{};
-   return nutrientName(x.product_name)===nutrientName(p.name)&&(!p.brand||!x.brands||nutrientName(x.brands).includes(nutrientName(p.brand))||nutrientName(p.brand).includes(nutrientName(x.brands)))&&Object.values({fat:n.fat_100g,sugar:n.sugars_100g,carbs:n.carbohydrates_100g,satFat:n['saturated-fat_100g'],unsatFat:n['unsaturated-fat_100g'],fiber:n.fiber_100g,salt:n.salt_100g,sodium:n.sodium_100g}).some(knownNutrient);
-  });
-  const compatible=candidates.filter(x=>{
-   const n=x.nutriments||{};
-   const pr=Number(n.proteins_100g),kc=Number(n['energy-kcal_100g']);
-   return Number.isFinite(pr)&&Number.isFinite(kc)&&Math.abs(pr-Number(p.protein))<=0.15&&Math.abs(kc-Number(p.kcal))<=3;
-  });
-  // Door gebruiker bevestigde barcode voor deze Jumbo-yoghurt. Alleen gebruiken bij exact passend product.
-  const confirmedYoghurt='8718452558322';
-  const exactYoghurt=nutrientName(p.name)==='yoghurt griekse stijl aardbei'&&
-    nutrientName(p.brand||p.store).includes('jumbo')&&
-    Math.abs(Number(p.protein)-2.9)<=0.15&&Math.abs(Number(p.kcal)-126)<=3;
-  if(exactYoghurt&&!preferredBarcodes[preferredProductKey(p)]){
-    const confirmed=compatible.find(x=>String(x.code)===confirmedYoghurt);
-    if(confirmed){fillFromNutrientMatch(p,confirmed);$('nutrientLookupStatus').textContent+=' Bevestigde barcode '+confirmedYoghurt+' gekozen.';return;}
-  }
-  const preferred=preferredBarcodes[preferredProductKey(p)];
-  const remembered=preferred&&compatible.find(x=>String(x.code)===preferred);
-  if(remembered){fillFromNutrientMatch(p,remembered);$('nutrientLookupStatus').textContent+=' Eerder bevestigde barcode '+preferred+' hergebruikt.';return;}
-  if(compatible.length===1){fillFromNutrientMatch(p,compatible[0]);$('nutrientLookupStatus').textContent+=' Automatisch gekoppeld op exacte naam én overeenkomende eiwit/kcal-waarden.';return;}
-  $('nutrientLookupStatus').textContent=compatible.length?'Meerdere mogelijke productmatches. Kies alleen het product dat precies overeenkomt.':'Geen voldoende zekere match gevonden. Controleer de verpakking of kies Open Food Facts als zoekbron.';
-  for(const x of compatible.slice(0,6)){
-   const b=document.createElement('button');b.type='button';b.className='mutedbtn';b.style.cssText='display:block;width:100%;text-align:left;margin:6px 0';
-   b.textContent=(x.product_name||'Product')+' · '+(x.brands||'')+' · '+(x.quantity||'')+' · '+String(x.code||'');b.onclick=()=>fillFromNutrientMatch(p,x);holder.append(b);
-  }
- }catch(e){if(selected===p)$('nutrientLookupStatus').textContent='Automatisch zoeken niet gelukt. Gebruik eventueel Open Food Facts of vul het etiket in.';}
+ $('nutrientLookupStatus').textContent='Ontbrekende voedingswaarden zoeken…';
+ const name=String(p.name||'').replace(/\s*[—–-]\s*Dagboek\s*$/i,'').trim();
+ const terms=[name,name.split(/\s+/).slice(0,3).join(' ')].filter((x,i,a)=>x.length>2&&a.indexOf(x)===i);
+ let products=[];
+ const key='julia-nutrient-match-cache-v3:'+nutrientName(name);
+ try{const c=JSON.parse(localStorage.getItem(key)||'null');if(c&&Date.now()-c.at<7*86400000)products=c.products||[]}catch{}
+ if(!products.length)for(const q of terms){
+  if(selected!==p)return;
+  try{
+   let data;
+   try{const r=await fetch('/api/nutrient-matches?q='+encodeURIComponent(q),{headers:{Accept:'application/json'}});if(r.ok)data=await r.json()}catch{}
+   if(!data?.products?.length){const r=await fetch('https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=50&fields=code,product_name,brands,nutriments,quantity',{headers:{Accept:'application/json'}});if(r.ok)data=await r.json()}
+   if(Array.isArray(data?.products))products.push(...data.products);
+  }catch{}
+  if(products.length>=20)break;
+ }
+ if(products.length)try{localStorage.setItem(key,JSON.stringify({at:Date.now(),products:products.slice(0,100)}))}catch{}
+ if(selected!==p)return;
+ const normalized=nutrientName(name),words=normalized.split(' ').filter(w=>w.length>2);
+ const candidates=products.filter(x=>{
+  const n=x.nutriments||{},nm=nutrientName(x.product_name),brand=nutrientName(p.brand==='Dagboek'?'':(p.brand||p.store||'')),source=nutrientName(x.brands||'');
+  return (nm===normalized||(words.length>=2&&words.every(w=>nm.split(' ').includes(w))))&&(!brand||brand==='zelf ingevoerd'||brand==='open food facts'||!source||source.includes(brand)||brand.includes(source))&&['fat_100g','sugars_100g','carbohydrates_100g','saturated-fat_100g','unsaturated-fat_100g','fiber_100g','salt_100g','sodium_100g'].some(k=>knownNutrient(n[k]));
+ });
+ const compatible=candidates.filter(x=>{const n=x.nutriments||{};return knownNutrient(n.proteins_100g)&&knownNutrient(n['energy-kcal_100g'])&&Math.abs(Number(n.proteins_100g)-Number(p.protein))<=0.15&&Math.abs(Number(n['energy-kcal_100g'])-Number(p.kcal))<=3});
+ const preferred=preferredBarcodes[preferredProductKey(p)];const remembered=preferred&&compatible.find(x=>String(x.code)===preferred);
+ if(remembered){fillFromNutrientMatch(p,remembered);return;}
+ const exact=compatible.filter(x=>nutrientName(x.product_name)===normalized);const matches=exact.length?exact:compatible;
+ if(matches.length&&new Set(matches.map(x=>String(x.code||''))).size===1){fillFromNutrientMatch(p,matches[0]);return;}
+ $('nutrientLookupStatus').textContent=compatible.length?'Meerdere passende producten. Kies de juiste verpakking.':'Geen betrouwbare match. Ontbrekende voedingswaarden blijven onbekend; controleer het etiket.';
+ for(const x of compatible.slice(0,6)){const b=document.createElement('button');b.type='button';b.className='mutedbtn';b.style.cssText='display:block;width:100%;text-align:left;margin:6px 0';b.textContent=(x.product_name||'Product')+' · '+(x.brands||'')+' · '+(x.quantity||'')+' · '+String(x.code||'');b.onclick=()=>fillFromNutrientMatch(p,x);holder.append(b)}
 }
 const nutrientLookupAttempts=new Map();
 async function supplementByExactBarcode(p){
