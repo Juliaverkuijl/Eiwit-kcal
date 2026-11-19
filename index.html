@@ -1410,7 +1410,7 @@ async function search(){
   if(sequence!==smartSearchSequence)return;
   products=products.filter(p=>smartScore(p,q)>=20);
   products=[...favMatches,...products.filter(p=>!favMatches.some(f=>productId(f)===productId(p)))];
-  products.sort((a,b)=>Number(favMatches.some(f=>productId(f)===productId(b)))-Number(favMatches.some(f=>productId(f)===productId(a)))||Number(!!b.verifiedStorePage)-Number(!!a.verifiedStorePage)||smartStorePriority(a)-smartStorePriority(b)||Number(!!b.dutchMarket)-Number(!!a.dutchMarket)||Number(!!b.dutchLanguage)-Number(!!a.dutchLanguage)||smartScore(b,q)-smartScore(a,q));
+  products.sort((a,b)=>familySearchBoost(b,q)-familySearchBoost(a,q)||Number(favMatches.some(f=>productId(f)===productId(b)))-Number(favMatches.some(f=>productId(f)===productId(a)))||Number(!!b.verifiedStorePage)-Number(!!a.verifiedStorePage)||smartStorePriority(a)-smartStorePriority(b)||Number(!!b.dutchMarket)-Number(!!a.dutchMarket)||Number(!!b.dutchLanguage)-Number(!!a.dutchLanguage)||smartScore(b,q)-smartScore(a,q));
   const data={products:products.slice(0,40)};
   const searchStatus=$('status');
   if(products.length){
@@ -1494,9 +1494,12 @@ function hideSuggestions(){$('suggestions').hidden=true;$('query').setAttribute(
 // Directe, gecontroleerde productvoorstellen werken ook zonder internetverbinding.
 // Waarden per 100 g overgenomen uit de door gebruiker aangeleverde Jumbo-productpagina.
 const riceTemplateProduct={name:'Rijst',brand:'Zelf ingevoerd',store:'Handmatig',protein:null,kcal:130,sugar:0.1,fat:0.3,carbs:28,nutritionSource:'Door gebruiker opgegeven waarden per 100 gram'};
+const terraDessertProduct={name:'AH Terra Plantaardige dessert cheesecake bes',brand:'AH Terra',store:'Albert Heijn',code:'8718907832274',quantity:'100 g',protein:0.6,kcal:261,fat:11,satFat:8.5,unsatFat:2.8,carbs:39,sugar:18,fiber:1.9,salt:0.13,portion:{grams:100,source:'portie',verified:true},verifiedStorePage:true,nutritionSource:'Albert Heijn productpagina wi515724',url:'https://www.ah.nl/producten/product/wi515724/plantaardig-dessert-cheesecake-bes'};
+function terraDessertQuery(q){const v=smartNormalize(q);return /plantaardig(?:e)?\s+(?:toetje|toetjes|dessert)/.test(v)||/terra/.test(v)&&/(dessert|cheesecake|plantaardig)/.test(v)||/cheesecake/.test(v)&&/(bes|plantaardig)/.test(v);}
 const featuredSearchProducts=[{name:'Ontbijtkoek Picnic',brand:'Zelf ingevoerd',store:'Handmatig',protein:2.8,kcal:294,fat:1,sugar:38,carbs:66,portion:{grams:26,source:'stuk',verified:true},nutritionSource:'Door gebruiker ingevoerde voedingswaarden'}, {name:'Biologische Sinaasappelsap',brand:'Dagboek',store:'Dagboek',protein:0.7,kcal:43,fat:0.2,sugar:9,carbs:9,nutritionSource:'Door gebruiker gecontroleerde voedingswaarden'}, {name:'Tomatenketchup',brand:'Albert Heijn',store:'Albert Heijn',protein:1.2,kcal:87,fat:0,sugar:15,carbs:20,nutritionSource:'Door gebruiker gecontroleerde voedingswaarden'}, {name:'Picnic Kaas plantaardige plakken',brand:'Picnic',store:'Picnic',quantity:'200 g',protein:0.1,kcal:269,fat:21,sugar:0.1,carbs:19,portion:{grams:25,source:'stuk'},nutritionSource:'Door gebruiker ingevoerde voedingswaarden'}, {name:'Lekker Vrij van Gluten Bruin',brand:'Jumbo',store:'Jumbo',quantity:'500 g',protein:3.9,kcal:220,fat:4.8,sugar:3.6,carbs:37.1,servingsCount:12,nutritionSource:'Jumbo productpagina (door gebruiker gecontroleerd)'}];
 // Door het gezin aangewezen zoekfavoriet: 'kaas' toont deze Picnic kaas als eerste.
 function familySearchBoost(p,q){
+ if(terraDessertQuery(q)&&String(p?.name||'')===terraDessertProduct.name)return 5000;
  const words=smartWords(q);
  const name=smartNormalize(p?.name),shop=smartNormalize(p?.store||p?.brand);
  if(words.some(w=>w.length>=2&&('rijst'.startsWith(w)||w.startsWith('rijst')))&&name==='rijst'&&shop.includes('handmatig'))return 2000;
@@ -1515,10 +1518,12 @@ function localSearchCandidates(q,store){
   const previous=found.get(key);
   if(!previous||priority>previous.priority||priority===previous.priority&&score>previous.score)found.set(key,{product:p,priority,score});
  };
+ if(terraDessertQuery(q)&&liveStoreMatches(terraDessertProduct,store))found.set('ah terra plantaardige dessert cheesecake bes|albert heijn',{product:terraDessertProduct,priority:20,score:5000});
  // Eigen producten hebben voorrang op het ingebouwde voorbeeld.
  if(smartWords(q).some(w=>w.length>=2&&('rijst'.startsWith(w)||w.startsWith('rijst'))))found.set('rijst|handmatig',{product:riceTemplateProduct,priority:10,score:2000});
  // Vaste gezinssuggestie: Picnic plantaardige kaas blijft bovenaan, ook bij winkel-filter.
  if(smartWords(q).some(w=>w.length>=2&&('kaas'.startsWith(w)||w.startsWith('kaas')))){const cheese=featuredSearchProducts.find(p=>p.name==='Picnic Kaas plantaardige plakken');if(cheese)found.set('picnic kaas plantaardige plakken|picnic',{product:cheese,priority:11,score:3000});}
+ if(terraDessertQuery(q))add(terraDessertProduct,20);
  featuredSearchProducts.forEach(p=>add(p,1));
  recentProducts.forEach(p=>add(p,4));
  familySearch.products.forEach(p=>add(p,5));
