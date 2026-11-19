@@ -861,7 +861,8 @@ function renderMealTrend(stats){
     const total=entries.reduce((sum,e)=>sum+(Number(metric==='protein'?e.p:e.k)||0),0);
     days.push({date,total,registered:entries.length>0});
   }
-  const peak=Math.max(1,...days.map(d=>d.total));
+  const norm=Number($(metric==='protein'?'limit':'kcalGoal').value)|| (metric==='protein'?21.5:1500);
+  const peak=Math.max(1,norm,...days.map(d=>d.total));
   const max=Math.max(metric==='protein'?5:100,metric==='protein'?Math.ceil(peak/5)*5:Math.ceil(peak/100)*100);
   const width=350,height=225,left=37,right=8,top=14,bottom=39,pw=width-left-right,ph=height-top-bottom;
   const x=i=>left+(i+.5)*pw/7;
@@ -874,14 +875,20 @@ function renderMealTrend(stats){
   const add=(tag,attrs,parent=svg)=>{const n=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,String(v));parent.append(n);return n;};
   const txt=(px,py,value,anchor='middle')=>{const n=add('text',{x:px,y:py,'text-anchor':anchor,fill:'#61736b','font-size':10});n.textContent=value;};
   for(let i=0;i<=4;i++){const v=max*i/4;add('line',{x1:left,y1:y(v),x2:width-right,y2:y(v),stroke:'#dfe9e3','stroke-width':1});txt(left-5,y(v)+3,metric==='protein'?String(Math.round(v*10)/10):String(Math.round(v)),'end');}
+  const normY=y(norm);
+  add('line',{x1:left,y1:normY,x2:width-right,y2:normY,stroke:'#c04444','stroke-width':1.7,'stroke-dasharray':'5 4'});
+  const normLabel=add('text',{x:width-right-2,y:Math.max(11,normY-5),'text-anchor':'end',fill:'#aa3030','font-size':9,'font-weight':'bold'});
+  normLabel.textContent=(metric==='protein'?'Limiet ':'Doel ')+(metric==='protein'?fmtProtein(norm):fmt(norm,0))+' '+unit;
   days.forEach((d,i)=>{
     const parts=d.date.split('-');txt(x(i),height-19,parts[2]+'/'+parts[1]);
-    const bar=add('rect',{x:x(i)-15,y:y(d.total),width:30,height:Math.max(0,ph*d.total/max),fill:'#23846e',rx:3});
-    const valueLabel=add('text',{x:x(i),y:Math.max(11,y(d.total)-5),'text-anchor':'middle',fill:'#176b59','font-size':10,'font-weight':'bold'});valueLabel.textContent=d.registered?(metric==='protein'?fmtProtein(d.total):fmt(d.total,0)):'–';
+    const good=metric==='protein'?d.total<=norm:d.total>=norm;
+    const barColor=!d.registered?'#b8c8c0':good?'#23846e':'#d64545';
+    const bar=add('rect',{x:x(i)-15,y:y(d.total),width:30,height:Math.max(0,ph*d.total/max),fill:barColor,rx:3});
+    const valueLabel=add('text',{x:x(i),y:Math.max(11,y(d.total)-5),'text-anchor':'middle',fill:barColor,'font-size':10,'font-weight':'bold'});valueLabel.textContent=d.registered?(metric==='protein'?fmtProtein(d.total):fmt(d.total,0)):'–';
     const tooltip=add('title',{},bar);tooltip.textContent=`${d.date}: ${metric==='protein'?fmtProtein(d.total):fmt(d.total,0)} ${unit}${d.registered?'':' (geen registratie)'}`;
   });
   holder.style.overflowX='hidden';holder.style.width='100%';holder.append(svg);
-  $('mealTrendNote').textContent='Laatste 7 kalenderdagen, inclusief vandaag. Eén balk per dag: ochtend, middag, avond en overige producten samen. Geen registratie wordt als 0 getoond.';
+  $('mealTrendNote').textContent='Laatste 7 kalenderdagen, inclusief vandaag. Stippellijn = '+(metric==='protein'?'eiwitlimiet ':'kcal-doel ')+(metric==='protein'?fmtProtein(norm):fmt(norm,0))+' '+unit+'. Groen = '+(metric==='protein'?'op of onder de limiet':'doel gehaald')+'; rood = '+(metric==='protein'?'boven de limiet':'onder het doel')+'. Vandaag kan nog onvolledig zijn. Geen registratie wordt als 0 getoond.';
 }
 let lastExtraNutrientStats=[];
 function renderExtraNutrientTrend(stats){
