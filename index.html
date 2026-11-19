@@ -699,7 +699,7 @@ async function loadNutritionOnline(){
  }));
  if(seq!==nutritionRequest)return;
  const seen=new Set();nutritionOnline=products.filter(p=>{const key=String(p.code||p.name+'|'+p.brand).toLowerCase();if(seen.has(key))return false;seen.add(key);return true});
- nutritionLoading=false;if(failures===terms.length)nutritionError='Online voedingsdatabase niet bereikbaar. Probeer het later opnieuw.';
+ nutritionLoading=false;if(failures===terms.length)nutritionError='Online zoeken lukt momenteel niet. Eerder opgeslagen producten blijven beschikbaar. Probeer later opnieuw.';
  renderNutritionGuide();
 }
 function renderNutritionGuide(){
@@ -1282,7 +1282,35 @@ $('addMealSelect').onchange=()=>{selectedMeal=$('addMealSelect').value};
 {const d=new Date(currentDate+'T12:00:00');d.setDate(d.getDate()-1);$('copySourceDate').value=[d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');$('copySourceDate').max=currentDate;}
 $('undoEntryButton').onclick=undoEntryRemoval;
 $('copyYesterday').onclick=()=>{ensureDate();const date=$('copySourceDate').value;if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||date>=currentDate){$('copyStatus').textContent='Kies een bestaande datum vóór vandaag.';return}if(!guardDay(currentDate))return;const meal=$('copyMeal').value;const old=(diary[date]?.entries||[]).filter(x=>(x.meal||'overig')===meal);if(!old.length){$('copyStatus').textContent='Geen '+meal+' gevonden op '+date+'.';return}if(!confirm(old.length+' producten van '+date+' kopiëren naar vandaag ('+meal+')?'))return;for(const x of old)entries.push({...x,id:crypto.randomUUID(),meal});persist();totals();mealExpanded[meal]=true;renderMeals();$('copyStatus').textContent=old.length+' producten gekopieerd. Controleer en wijzig zo nodig de hoeveelheden.';};
-async function searchOpenFoodFacts(q){const url='https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=25&fields=code,product_name,brands,nutriments,quantity,image_front_small_url';const r=await fetch(url,{headers:{'Accept':'application/json'}});if(!r.ok)throw Error('Open Food Facts is momenteel niet bereikbaar');const data=await r.json();return (data.products||[]).filter(p=>p.product_name&&Number.isFinite(Number(p.nutriments?.['proteins_100g']))&&Number.isFinite(Number(p.nutriments?.['energy-kcal_100g']))).map(p=>({name:p.product_name,brand:p.brands||'Open Food Facts',store:'Open Food Facts',code:p.code,protein:Number(p.nutriments['proteins_100g']),kcal:Number(p.nutriments['energy-kcal_100g']),quantity:p.quantity||'',sugar:p.nutriments?.['sugars_100g']??null,fat:p.nutriments?.['fat_100g']??null,carbs:p.nutriments?.['carbohydrates_100g']??null,satFat:p.nutriments?.['saturated-fat_100g']??null,unsatFat:p.nutriments?.['unsaturated-fat_100g']??null,fiber:p.nutriments?.fiber_100g??null,salt:p.nutriments?.salt_100g??null,sodium:p.nutriments?.sodium_100g??null,image:p.image_front_small_url||''})).filter(p=>p.protein>=0&&p.kcal>=0)}
+async function searchOpenFoodFacts(q){
+ const key='nutrition-off-cache-v2:'+q.toLocaleLowerCase('nl-NL');
+ const cached=(()=>{try{return JSON.parse(localStorage.getItem(key)||'null')}catch{return null}})();
+ if(cached&&Date.now()-cached.at<7*86400000)return cached.products;
+ const fields='code,product_name,brands,nutriments,quantity,image_front_small_url';
+ const query=encodeURIComponent(q);
+ const urls=[
+  'https://world.openfoodfacts.org/cgi/search.pl?search_terms='+query+'&search_simple=1&action=process&json=1&page_size=50&fields='+fields,
+  'https://nl.openfoodfacts.org/cgi/search.pl?search_terms='+query+'&search_simple=1&action=process&json=1&page_size=50&fields='+fields,
+  'https://search.openfoodfacts.org/search?q='+query+'&page_size=50'
+ ];
+ let lastError=null;
+ for(const url of urls){
+  try{
+   const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),9000);
+   let r;try{r=await fetch(url,{headers:{Accept:'application/json'},signal:controller.signal})}finally{clearTimeout(timer)}
+   if(!r.ok)throw Error('HTTP '+r.status);
+   const data=await r.json();if(!Array.isArray(data.products))throw Error('Ongeldig antwoord');
+   const products=data.products.filter(p=>p.product_name&&p.nutriments&&p.nutriments['proteins_100g']!=null&&(p.nutriments['energy-kcal_100g']!=null||p.nutriments['energy_100g']!=null)).map(p=>{
+    const n=p.nutriments;const kcal=n['energy-kcal_100g']!=null?Number(n['energy-kcal_100g']):Number(n['energy_100g'])/4.184;
+    return {name:p.product_name,brand:p.brands||'Open Food Facts',store:'Open Food Facts',code:p.code,protein:Number(n['proteins_100g']),kcal,quantity:p.quantity||'',sugar:n['sugars_100g']??null,fat:n['fat_100g']??null,carbs:n['carbohydrates_100g']??null,satFat:n['saturated-fat_100g']??null,unsatFat:n['unsaturated-fat_100g']??null,fiber:n.fiber_100g??null,salt:n.salt_100g??null,sodium:n.sodium_100g??null,image:p.image_front_small_url||''};
+   }).filter(p=>Number.isFinite(p.protein)&&Number.isFinite(p.kcal)&&p.protein>=0&&p.kcal>=0);
+   try{localStorage.setItem(key,JSON.stringify({at:Date.now(),products}))}catch{}
+   return products;
+  }catch(e){lastError=e}
+ }
+ if(cached?.products?.length)return cached.products;
+ throw lastError||Error('Online zoekbronnen niet bereikbaar');
+}
 renderQuickProducts();
 
 // Slim zoeken: accenten, typefouten, gedeeltelijke namen en woordvolgorde.
