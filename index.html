@@ -1389,13 +1389,49 @@ function searchExpandedVariants(q){
  const words=smartWords(q);if(words.length>1)variants.push(words.slice().reverse().join(' '));
  return [...new Set(variants.map(v=>v.trim()).filter(v=>v.length>=2))].slice(0,6);
 }
+// Begrijp natuurlijke Nederlandse productomschrijvingen en woordvolgorde.
+function productSearchVariants(q){
+ const n=smartNormalize(q), out=[q];
+ const hasReep=/\b(re(e)?p|repen|chocoladereep|chocoreep)\b/.test(n);
+ const hasChoco=/choc|cacao/.test(n);
+ const hasMelk=/melk|milk/.test(n);
+ if(hasReep&&hasChoco){
+  if(hasMelk)out.push('melkchocoladereep','melk chocolade reep','reep melkchocolade','milk chocolate bar');
+  out.push('chocoladereep','chocolade reep','chocolate bar');
+ }
+ if(hasChoco&&hasMelk&&!hasReep)out.push('melkchocolade','chocolademelk');
+ if(n.includes('chocola'))out.push(n.replace(/chocola/g,'chocolade'));
+ return [...new Set(out.map(x=>x.trim()).filter(x=>x.length>=2))];
+}
+function productSearchScore(p,q){
+ const base=smartScore(p,q);
+ const name=smartNormalize(p.name+' '+(p.brand||''));
+ const query=smartNormalize(q);
+ // 'chocolade reep melk' en 'reep chocola melk' zijn dezelfde productvraag.
+ if(/(?:choc|cacao)/.test(query)&&/\b(?:reep|repen|tablet|chocoladereep)\b/.test(query)&&/\bmelk\b/.test(query)
+    &&/\breep\b/.test(name)&&/\bmelk\b/.test(name))return Math.max(base,190);
+ if(base>=20)return base;
+ const name=smartNormalize(p.name+' '+(p.brand||''));
+ const query=smartNormalize(q);
+ if(/choc/.test(query)&&/reep|bar/.test(query)&&/choc|chocolate/.test(name)&&/reep|bar|tablet/.test(name)){
+  if(/melk/.test(query)&&!/melk|milk/.test(name))return -100;
+  return 28;
+ }
+ return base;
+}
 async function openFoodFactsFallback(q){
- const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),6500);
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),4500);
  try{
-  const url='https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=30&fields=code,product_name,brands,nutriments,quantity,image_front_small_url';
-  const r=await fetch(url,{headers:{Accept:'application/json'},signal:controller.signal});if(!r.ok)throw Error('Open Food Facts niet bereikbaar');
-  const data=await r.json();return (data.products||[]).filter(p=>p.product_name&&p.nutriments).map(p=>{
-   const n=p.nutriments;let kcal=Number(n['energy-kcal_100g']);if(!Number.isFinite(kcal))kcal=Number(n['energy-kcal']);
+  const fields='code,product_name,brands,nutriments,quantity,image_front_small_url';
+  const urls=[
+   'https://world.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=50&fields='+fields,
+   'https://nl.openfoodfacts.org/cgi/search.pl?search_terms='+encodeURIComponent(q)+'&search_simple=1&action=process&json=1&page_size=50&fields='+fields,
+   'https://search.openfoodfacts.org/search?q='+encodeURIComponent(q)+'&page_size=50'
+  ];
+  let data=null,lastError=null;
+  for(const url of urls){try{const r=await fetch(url,{headers:{Accept:'application/json'},signal:controller.signal});if(!r.ok)throw Error('HTTP '+r.status);const candidate=await r.json();if(Array.isArray(candidate.products)){data=candidate;break}}catch(e){lastError=e}}
+  if(!data)throw lastError||Error('Open Food Facts niet bereikbaar');return (data.products||[]).filter(p=>p.product_name&&p.nutriments).map(p=>{
+   const n=p.nutriments;let kcal=n['energy-kcal_100g']!=null?Number(n['energy-kcal_100g']):n['energy-kcal']!=null?Number(n['energy-kcal']):NaN;if(!Number.isFinite(kcal)&&n.energy_100g!=null)kcal=Number(n.energy_100g)/4.184;
    const protein=Number(n.proteins_100g);if(!Number.isFinite(protein)||!Number.isFinite(kcal)||protein<0||kcal<0)return null;
    return {name:p.product_name,brand:p.brands||'Open Food Facts',store:'Open Food Facts',code:p.code,protein,kcal,quantity:p.quantity||'',sugar:n.sugars_100g??null,fat:n.fat_100g??null,carbs:n.carbohydrates_100g??null,satFat:n['saturated-fat_100g']??null,unsatFat:n['unsaturated-fat_100g']??null,fiber:n.fiber_100g??null,salt:n.salt_100g??null,sodium:n.sodium_100g??null,image:p.image_front_small_url||'',nutritionSource:'Open Food Facts (controleer verpakking)'};
   }).filter(Boolean);
@@ -1411,30 +1447,30 @@ async function search(){
  // Toon lokale favorieten meteen, ook wanneer externe zoekdiensten traag of onbereikbaar zijn.
  for(const p of favMatches){const row=document.createElement('div');row.className='result';const detail=document.createElement('div');detail.className='details';const title=document.createElement('strong');title.textContent='⭐ '+p.name;const meta=document.createElement('div');meta.className='small';const shop=String(p.store||'').trim();meta.textContent=(shop||'Supermarkt onbekend')+' · '+fmtProtein(p.protein)+' g eiwit /100 g · '+fmt(p.kcal,0)+' kcal';const btn=document.createElement('button');btn.type='button';btn.textContent='Kies';btn.onclick=()=>{choose(p);$('calculator').scrollIntoView({behavior:'smooth',block:'start'})};detail.append(title,meta);row.append(detail,btn);$('results').append(row)}
  try{
-  const variants=[...new Set([q,...searchExpandedVariants(q),...smartVariants(q)])].filter(Boolean).slice(0,4);
-  let products=[],errors=[],seen=new Set();
+  const variants=[...new Set([...productSearchVariants(q),...searchExpandedVariants(q),...smartVariants(q)])].filter(Boolean).slice(0,9);
+  let products=[],errors=[],seen=new Set(),backendUnavailable=false;
   // Eerst de eigen zoekdienst; bij een fout of te weinig treffers ook Open Food Facts proberen.
   for(let i=0;i<variants.length;i++){
-   if(i>0&&products.filter(p=>smartScore(p,q)>=20).length>=8)break;
+   if(backendUnavailable||i>0&&products.filter(p=>productSearchScore(p,q)>=20).length>=8)break;
    try{const found=await smartFetch(variants[i],store);
     if(sequence!==smartSearchSequence)return;
     for(const p of found){const id=String(p.store||'onbekend').toLowerCase()+'|'+productId(p);if(!seen.has(id)){seen.add(id);products.push(p)}}
-   }catch(e){errors.push(e.message||String(e));if(i===0)break;}
+   }catch(e){errors.push(e.message||String(e));if(/zoekservice geeft geen geldig antwoord|404|failed to fetch|networkerror|unexpected token/i.test(String(e.message||e)))backendUnavailable=true;}
   }
-  if(products.filter(p=>smartScore(p,q)>=20).length<5&&(store==='both'||store==='all'||store==='off')){
+  if(products.filter(p=>productSearchScore(p,q)>=20).length<5&&(store==='both'||store==='all'||store==='off')){
    try{
-    const offQueries=[q];if(searchExpandedVariants(q).length>1)offQueries.push(searchExpandedVariants(q)[1]);
-    for(const term of offQueries.slice(0,2)){
-     const found=await openFoodFactsFallback(term);if(sequence!==smartSearchSequence)return;
+    const offQueries=[...new Set([...productSearchVariants(q),...searchExpandedVariants(q)])].slice(0,7);
+    for(const term of offQueries){
+     let found=[];try{found=await openFoodFactsFallback(term)}catch(e){errors.push('Open Food Facts: '+(e.message||String(e)));continue}if(sequence!==smartSearchSequence)return;
      for(const p of found){const id='open food facts|'+productId(p);if(!seen.has(id)){seen.add(id);products.push(p)}}
-     if(products.filter(p=>smartScore(p,q)>=20).length>=8)break;
+     if(products.filter(p=>productSearchScore(p,q)>=20).length>=8)break;
     }
    }catch(e){errors.push('Open Food Facts: '+(e.message||String(e)))}
   }
   if(sequence!==smartSearchSequence)return;
-  products=products.filter(p=>smartScore(p,q)>=20);
+  products=products.filter(p=>productSearchScore(p,q)>=20);
   products=[...favMatches,...products.filter(p=>!favMatches.some(f=>productId(f)===productId(p)))];
-  products.sort((a,b)=>familySearchBoost(b,q)-familySearchBoost(a,q)||Number(favMatches.some(f=>productId(f)===productId(b)))-Number(favMatches.some(f=>productId(f)===productId(a)))||Number(!!b.verifiedStorePage)-Number(!!a.verifiedStorePage)||smartStorePriority(a)-smartStorePriority(b)||Number(!!b.dutchMarket)-Number(!!a.dutchMarket)||Number(!!b.dutchLanguage)-Number(!!a.dutchLanguage)||smartScore(b,q)-smartScore(a,q));
+  products.sort((a,b)=>familySearchBoost(b,q)-familySearchBoost(a,q)||Number(favMatches.some(f=>productId(f)===productId(b)))-Number(favMatches.some(f=>productId(f)===productId(a)))||Number(!!b.verifiedStorePage)-Number(!!a.verifiedStorePage)||smartStorePriority(a)-smartStorePriority(b)||Number(!!b.dutchMarket)-Number(!!a.dutchMarket)||Number(!!b.dutchLanguage)-Number(!!a.dutchLanguage)||productSearchScore(b,q)-productSearchScore(a,q));
   const data={products:products.slice(0,40)};
   const searchStatus=$('status');
   if(products.length){
@@ -1449,7 +1485,7 @@ async function search(){
     heading.style.cssText='display:block;font-size:1.13rem;margin-bottom:6px';
     const detail=document.createElement('span');
     detail.textContent=unavailable
-      ?'De zoekdiensten gaven geen bruikbare resultaten. Probeer een kortere naam, een synoniem, de barcode of een supermarktlink hieronder.'
+      ?'Er zijn geen bruikbare producten teruggekomen uit de beschikbare zoekbronnen. We hebben ook alternatieve productnamen geprobeerd. Controleer de online verbinding of zoek via de supermarktlinks.'
       :'Geen passend product gevonden. Probeer bijvoorbeeld ‘chocolademelk’ in plaats van ‘chocomelk’, scan de barcode of gebruik een supermarktlink.';
     searchStatus.append(heading,detail);
     searchStatus.style.cssText='display:block;padding:14px 16px;margin:12px 0;border-radius:12px;border:1px solid #e5a3a3;background:#fff3f3;color:#8b2020;line-height:1.5';
@@ -1500,7 +1536,7 @@ function rememberProduct(p){
 }
 // Live productvoorstellen uit de voedingsdatabase, naast lokale favorieten en zoekgeschiedenis.
 const liveSuggestionCache=new Map();let liveSuggestionTimer=null,liveSuggestionRequest=0;
-function liveStoreMatches(p,store){if(store==='both')return true;const names={ah:'albert heijn',jumbo:'jumbo',picnic:'picnic',plus:'plus',lidl:'lidl'};return smartNormalize(p.store)===names[store]}
+function liveStoreMatches(p,store){if(store==='both'||store==='all'||store==='off')return true;const names={ah:'albert heijn',jumbo:'jumbo',picnic:'picnic',plus:'plus',lidl:'lidl'};return smartNormalize(p.store)===names[store]}
 function scheduleLiveSuggestions(){
  clearTimeout(liveSuggestionTimer);const q=$('query').value.trim(),store=$('store').value,request=++liveSuggestionRequest;
  if(q.length<3){liveSuggestionProducts=[];showSuggestions();return}
@@ -1520,7 +1556,7 @@ function hideSuggestions(){$('suggestions').hidden=true;$('query').setAttribute(
 const riceTemplateProduct={name:'Rijst',brand:'Zelf ingevoerd',store:'Handmatig',protein:null,kcal:130,sugar:0.1,fat:0.3,carbs:28,nutritionSource:'Door gebruiker opgegeven waarden per 100 gram'};
 const terraDessertProduct={name:'AH Terra Plantaardige dessert cheesecake bes',brand:'AH Terra',store:'Albert Heijn',code:'8718907832274',quantity:'100 g',protein:0.6,kcal:261,fat:11,satFat:8.5,unsatFat:2.8,carbs:39,sugar:18,fiber:1.9,salt:0.13,portion:{grams:100,source:'portie',verified:true},verifiedStorePage:true,nutritionSource:'Albert Heijn productpagina wi515724',url:'https://www.ah.nl/producten/product/wi515724/plantaardig-dessert-cheesecake-bes'};
 function terraDessertQuery(q){const v=smartNormalize(q);return /plantaardig(?:e)?\s+(?:toetje|toetjes|dessert)/.test(v)||/terra/.test(v)&&/(dessert|cheesecake|plantaardig)/.test(v)||/cheesecake/.test(v)&&/(bes|plantaardig)/.test(v);}
-const featuredSearchProducts=[{name:'Ontbijtkoek Picnic',brand:'Zelf ingevoerd',store:'Handmatig',protein:2.8,kcal:294,fat:1,sugar:38,carbs:66,portion:{grams:26,source:'stuk',verified:true},nutritionSource:'Door gebruiker ingevoerde voedingswaarden'}, {name:'Biologische Sinaasappelsap',brand:'Dagboek',store:'Dagboek',protein:0.7,kcal:43,fat:0.2,sugar:9,carbs:9,nutritionSource:'Door gebruiker gecontroleerde voedingswaarden'}, {name:'Tomatenketchup',brand:'Albert Heijn',store:'Albert Heijn',protein:1.2,kcal:87,fat:0,sugar:15,carbs:20,nutritionSource:'Door gebruiker gecontroleerde voedingswaarden'}, {name:'Picnic Kaas plantaardige plakken',brand:'Picnic',store:'Picnic',quantity:'200 g',protein:0.1,kcal:269,fat:21,sugar:0.1,carbs:19,portion:{grams:25,source:'stuk'},nutritionSource:'Door gebruiker ingevoerde voedingswaarden'}, {name:'Lekker Vrij van Gluten Bruin',brand:'Jumbo',store:'Jumbo',quantity:'500 g',protein:3.9,kcal:220,fat:4.8,sugar:3.6,carbs:37.1,servingsCount:12,nutritionSource:'Jumbo productpagina (door gebruiker gecontroleerd)'}];
+const featuredSearchProducts=[{name:'AH Reep melk',brand:'AH',store:'Albert Heijn',quantity:'200 g',protein:5.2,kcal:539,fat:31,satFat:19,unsatFat:11,carbs:59,sugar:58,fiber:1.6,salt:0.15,portion:{grams:6.3,source:'stuk',verified:true},verifiedStorePage:true,nutritionSource:'Voedingswaardetabel op door gebruiker aangeleverde AH-verpakking (per 100 g)'}, {name:'IJshoorntje (ijshoorn)',brand:'Handmatig',store:'Handmatig',protein:11,kcal:396,carbs:78,sugar:2.3,fat:3.8,salt:0.4,nutritionSource:'Door gebruiker ingevoerde voedingswaarden per 100 gram'}, {name:'Ontbijtkoek Picnic',brand:'Zelf ingevoerd',store:'Handmatig',protein:2.8,kcal:294,fat:1,sugar:38,carbs:66,portion:{grams:26,source:'stuk',verified:true},nutritionSource:'Door gebruiker ingevoerde voedingswaarden'}, {name:'Biologische Sinaasappelsap',brand:'Dagboek',store:'Dagboek',protein:0.7,kcal:43,fat:0.2,sugar:9,carbs:9,nutritionSource:'Door gebruiker gecontroleerde voedingswaarden'}, {name:'Tomatenketchup',brand:'Albert Heijn',store:'Albert Heijn',protein:1.2,kcal:87,fat:0,sugar:15,carbs:20,nutritionSource:'Door gebruiker gecontroleerde voedingswaarden'}, {name:'Picnic Kaas plantaardige plakken',brand:'Picnic',store:'Picnic',quantity:'200 g',protein:0.1,kcal:269,fat:21,sugar:0.1,carbs:19,portion:{grams:25,source:'stuk'},nutritionSource:'Door gebruiker ingevoerde voedingswaarden'}, {name:'Lekker Vrij van Gluten Bruin',brand:'Jumbo',store:'Jumbo',quantity:'500 g',protein:3.9,kcal:220,fat:4.8,sugar:3.6,carbs:37.1,servingsCount:12,nutritionSource:'Jumbo productpagina (door gebruiker gecontroleerd)'}];
 // Door het gezin aangewezen zoekfavoriet: 'kaas' toont deze Picnic kaas als eerste.
 function familySearchBoost(p,q){
  if(terraDessertQuery(q)&&String(p?.name||'')===terraDessertProduct.name)return 5000;
@@ -1537,7 +1573,7 @@ function localSearchCandidates(q,store){
  const add=(p,priority)=>{
   if(!p||!p.name||!liveStoreMatches(p,store))return;
   const prefix=smartNormalize(p.name).split(' ').some(word=>word.startsWith(smartNormalize(q))) || smartNormalize(p.name).startsWith(smartNormalize(q));
-  const score=prefix?Math.max(100,smartScore(p,q)):smartScore(p,q);if(score<12)return;
+  const score=prefix?Math.max(100,productSearchScore(p,q)):productSearchScore(p,q);if(score<12)return;
   const key=smartNormalize(p.name)+'|'+smartNormalize(p.store||p.brand);
   const previous=found.get(key);
   if(!previous||priority>previous.priority||priority===previous.priority&&score>previous.score)found.set(key,{product:p,priority,score});
