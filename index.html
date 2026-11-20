@@ -1411,8 +1411,6 @@ function productSearchScore(p,q){
  if(/(?:choc|cacao)/.test(query)&&/\b(?:reep|repen|tablet|chocoladereep)\b/.test(query)&&/\bmelk\b/.test(query)
     &&/\breep\b/.test(name)&&/\bmelk\b/.test(name))return Math.max(base,190);
  if(base>=20)return base;
- const name=smartNormalize(p.name+' '+(p.brand||''));
- const query=smartNormalize(q);
  if(/choc/.test(query)&&/reep|bar/.test(query)&&/choc|chocolate/.test(name)&&/reep|bar|tablet/.test(name)){
   if(/melk/.test(query)&&!/melk|milk/.test(name))return -100;
   return 28;
