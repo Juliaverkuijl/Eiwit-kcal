@@ -1405,11 +1405,6 @@ function productSearchVariants(q){
 }
 function productSearchScore(p,q){
  const base=smartScore(p,q);
- const name=smartNormalize(p.name+' '+(p.brand||''));
- const query=smartNormalize(q);
- // 'chocolade reep melk' en 'reep chocola melk' zijn dezelfde productvraag.
- if(/(?:choc|cacao)/.test(query)&&/\b(?:reep|repen|tablet|chocoladereep)\b/.test(query)&&/\bmelk\b/.test(query)
-    &&/\breep\b/.test(name)&&/\bmelk\b/.test(name))return Math.max(base,190);
  if(base>=20)return base;
  const name=smartNormalize(p.name+' '+(p.brand||''));
  const query=smartNormalize(q);
@@ -1556,7 +1551,7 @@ function hideSuggestions(){$('suggestions').hidden=true;$('query').setAttribute(
 const riceTemplateProduct={name:'Rijst',brand:'Zelf ingevoerd',store:'Handmatig',protein:null,kcal:130,sugar:0.1,fat:0.3,carbs:28,nutritionSource:'Door gebruiker opgegeven waarden per 100 gram'};
 const terraDessertProduct={name:'AH Terra Plantaardige dessert cheesecake bes',brand:'AH Terra',store:'Albert Heijn',code:'8718907832274',quantity:'100 g',protein:0.6,kcal:261,fat:11,satFat:8.5,unsatFat:2.8,carbs:39,sugar:18,fiber:1.9,salt:0.13,portion:{grams:100,source:'portie',verified:true},verifiedStorePage:true,nutritionSource:'Albert Heijn productpagina wi515724',url:'https://www.ah.nl/producten/product/wi515724/plantaardig-dessert-cheesecake-bes'};
 function terraDessertQuery(q){const v=smartNormalize(q);return /plantaardig(?:e)?\s+(?:toetje|toetjes|dessert)/.test(v)||/terra/.test(v)&&/(dessert|cheesecake|plantaardig)/.test(v)||/cheesecake/.test(v)&&/(bes|plantaardig)/.test(v);}
-const featuredSearchProducts=[{name:'AH Reep melk',brand:'AH',store:'Albert Heijn',quantity:'200 g',protein:5.2,kcal:539,fat:31,satFat:19,unsatFat:11,carbs:59,sugar:58,fiber:1.6,salt:0.15,portion:{grams:6.3,source:'stuk',verified:true},verifiedStorePage:true,nutritionSource:'Voedingswaardetabel op door gebruiker aangeleverde AH-verpakking (per 100 g)'}, {name:'IJshoorntje (ijshoorn)',brand:'Handmatig',store:'Handmatig',protein:11,kcal:396,carbs:78,sugar:2.3,fat:3.8,salt:0.4,nutritionSource:'Door gebruiker ingevoerde voedingswaarden per 100 gram'}, {name:'Ontbijtkoek Picnic',brand:'Zelf ingevoerd',store:'Handmatig',protein:2.8,kcal:294,fat:1,sugar:38,carbs:66,portion:{grams:26,source:'stuk',verified:true},nutritionSource:'Door gebruiker ingevoerde voedingswaarden'}, {name:'Biologische Sinaasappelsap',brand:'Dagboek',store:'Dagboek',protein:0.7,kcal:43,fat:0.2,sugar:9,carbs:9,nutritionSource:'Door gebruiker gecontroleerde voedingswaarden'}, {name:'Tomatenketchup',brand:'Albert Heijn',store:'Albert Heijn',protein:1.2,kcal:87,fat:0,sugar:15,carbs:20,nutritionSource:'Door gebruiker gecontroleerde voedingswaarden'}, {name:'Picnic Kaas plantaardige plakken',brand:'Picnic',store:'Picnic',quantity:'200 g',protein:0.1,kcal:269,fat:21,sugar:0.1,carbs:19,portion:{grams:25,source:'stuk'},nutritionSource:'Door gebruiker ingevoerde voedingswaarden'}, {name:'Lekker Vrij van Gluten Bruin',brand:'Jumbo',store:'Jumbo',quantity:'500 g',protein:3.9,kcal:220,fat:4.8,sugar:3.6,carbs:37.1,servingsCount:12,nutritionSource:'Jumbo productpagina (door gebruiker gecontroleerd)'}];
+const featuredSearchProducts=[{name:'IJshoorntje (ijshoorn)',brand:'Handmatig',store:'Handmatig',protein:11,kcal:396,carbs:78,sugar:2.3,fat:3.8,salt:0.4,nutritionSource:'Door gebruiker ingevoerde voedingswaarden per 100 gram'}, {name:'Ontbijtkoek Picnic',brand:'Zelf ingevoerd',store:'Handmatig',protein:2.8,kcal:294,fat:1,sugar:38,carbs:66,portion:{grams:26,source:'stuk',verified:true},nutritionSource:'Door gebruiker ingevoerde voedingswaarden'}, {name:'Biologische Sinaasappelsap',brand:'Dagboek',store:'Dagboek',protein:0.7,kcal:43,fat:0.2,sugar:9,carbs:9,nutritionSource:'Door gebruiker gecontroleerde voedingswaarden'}, {name:'Tomatenketchup',brand:'Albert Heijn',store:'Albert Heijn',protein:1.2,kcal:87,fat:0,sugar:15,carbs:20,nutritionSource:'Door gebruiker gecontroleerde voedingswaarden'}, {name:'Picnic Kaas plantaardige plakken',brand:'Picnic',store:'Picnic',quantity:'200 g',protein:0.1,kcal:269,fat:21,sugar:0.1,carbs:19,portion:{grams:25,source:'stuk'},nutritionSource:'Door gebruiker ingevoerde voedingswaarden'}, {name:'Lekker Vrij van Gluten Bruin',brand:'Jumbo',store:'Jumbo',quantity:'500 g',protein:3.9,kcal:220,fat:4.8,sugar:3.6,carbs:37.1,servingsCount:12,nutritionSource:'Jumbo productpagina (door gebruiker gecontroleerd)'}];
 // Door het gezin aangewezen zoekfavoriet: 'kaas' toont deze Picnic kaas als eerste.
 function familySearchBoost(p,q){
  if(terraDessertQuery(q)&&String(p?.name||'')===terraDessertProduct.name)return 5000;
@@ -1573,7 +1568,7 @@ function localSearchCandidates(q,store){
  const add=(p,priority)=>{
   if(!p||!p.name||!liveStoreMatches(p,store))return;
   const prefix=smartNormalize(p.name).split(' ').some(word=>word.startsWith(smartNormalize(q))) || smartNormalize(p.name).startsWith(smartNormalize(q));
-  const score=prefix?Math.max(100,productSearchScore(p,q)):productSearchScore(p,q);if(score<12)return;
+  const score=prefix?Math.max(100,smartScore(p,q)):smartScore(p,q);if(score<12)return;
   const key=smartNormalize(p.name)+'|'+smartNormalize(p.store||p.brand);
   const previous=found.get(key);
   if(!previous||priority>previous.priority||priority===previous.priority&&score>previous.score)found.set(key,{product:p,priority,score});
