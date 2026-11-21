@@ -1274,6 +1274,9 @@ rememberProduct(selected);if(topping)rememberProduct(topping);renderQuickProduct
 
 const explicitFavKey='julia-product-favorites-v1';
 const recentProductsKey='julia-product-recent-v1';
+const productLibraryKey='eiwitkcal-productbibliotheek-v1';
+let productLibrary=[];try{productLibrary=JSON.parse(localStorage.getItem(productLibraryKey)||'[]');if(!Array.isArray(productLibrary))productLibrary=[]}catch{productLibrary=[]}
+function saveProductToLibrary(p){if(!p?.name)return;const id=String(p.code||p.barcode||[p.name,p.brand,p.store].join('|')).toLocaleLowerCase('nl-NL');const index=productLibrary.findIndex(x=>String(x.code||x.barcode||[x.name,x.brand,x.store].join('|')).toLocaleLowerCase('nl-NL')===id);if(index>=0)productLibrary[index]={...productLibrary[index],...p};else productLibrary.push(p);try{localStorage.setItem(productLibraryKey,JSON.stringify(productLibrary))}catch(e){console.warn('Productbibliotheek opslaan mislukt',e)}}
 let explicitFavs=[];let recentProducts=[];
 try{explicitFavs=JSON.parse(localStorage.getItem(explicitFavKey)||'[]');if(!Array.isArray(explicitFavs))explicitFavs=[]}catch{}
 try{recentProducts=JSON.parse(localStorage.getItem(recentProductsKey)||'[]');if(!Array.isArray(recentProducts))recentProducts=[]}catch{}
@@ -1308,9 +1311,16 @@ if(!localStorage.getItem(picnicSeedKey)){
   }
   localStorage.setItem(picnicSeedKey,'1');
 }
+// Eenmalige migratie van alle bestaande opgeslagen productlijsten naar de blijvende bibliotheek.
+if(!localStorage.getItem('eiwitkcal-productbibliotheek-migratie-v1')){
+ for(const p of [...recentProducts,...explicitFavs])saveProductToLibrary(p);
+ try{const old=JSON.parse(localStorage.getItem('eiwitkcal-family-search-v1')||'{}');for(const p of old.products||[])saveProductToLibrary(p)}catch{}
+ try{const old=JSON.parse(localStorage.getItem('eiwitkcal-vaak-gekozen-v1')||'[]');for(const f of old)if(f.product)saveProductToLibrary(f.product)}catch{}
+ localStorage.setItem('eiwitkcal-productbibliotheek-migratie-v1','1');
+}
 let quickTab='favorites';
 const productId=p=>String(p.store||'onbekend').toLocaleLowerCase('nl-NL')+'|'+String(p.id||p.productUrl||p.code||p.barcode||[p.name,p.brand].join('|')).toLocaleLowerCase('nl-NL');
-function trackRecent(p){const id=productId(p);recentProducts=[p,...recentProducts.filter(x=>productId(x)!==id)].slice(0,20);localStorage.setItem(recentProductsKey,JSON.stringify(recentProducts));renderQuickProducts()}
+function trackRecent(p){saveProductToLibrary(p);const id=productId(p);recentProducts=[p,...recentProducts.filter(x=>productId(x)!==id)];localStorage.setItem(recentProductsKey,JSON.stringify(recentProducts));renderQuickProducts()}
 const favoriteMealKey='julia-favorite-meal-groups-v1';
 let favoriteMealGroups={};
 try{favoriteMealGroups=JSON.parse(localStorage.getItem(favoriteMealKey)||'{}')||{}}catch{}
@@ -1509,9 +1519,11 @@ async function search(){
  if(q.length<2){$('status').textContent='Vul minimaal twee letters in.';return}
  const sequence=++smartSearchSequence,store=$('store').value;
  const favMatches=localSearchCandidates(q,store).filter(x=>x.score>=12).map(x=>x.product);
+ const offlineSearch=!navigator.onLine;
  $('searchBtn').disabled=true;$('status').textContent=favMatches.length?'⭐ '+favMatches.length+' favoriet(en) gevonden · overige producten zoeken…':'🔎 Producten zoeken…';$('results').replaceChildren();
  // Toon lokale favorieten meteen, ook wanneer externe zoekdiensten traag of onbereikbaar zijn.
  for(const p of favMatches){const row=document.createElement('div');row.className='result';const detail=document.createElement('div');detail.className='details';const title=document.createElement('strong');title.textContent='⭐ '+p.name;const meta=document.createElement('div');meta.className='small';const shop=String(p.store||'').trim();meta.textContent=(shop||'Supermarkt onbekend')+' · '+fmtProtein(p.protein)+' g eiwit /100 g · '+fmt(p.kcal,0)+' kcal';const btn=document.createElement('button');btn.type='button';btn.textContent='Kies';btn.onclick=()=>{choose(p);$('calculator').scrollIntoView({behavior:'smooth',block:'start'})};detail.append(title,meta);row.append(detail,btn);$('results').append(row)}
+ if(offlineSearch){$('searchBtn').disabled=false;$('status').textContent=favMatches.length?'📴 Offline · '+favMatches.length+' opgeslagen producten gevonden':'📴 Offline · dit product staat nog niet lokaal opgeslagen. Online zoeken kan zodra je weer internet hebt.';return;}
  try{
   const variants=[...new Set([...productSearchVariants(q),...searchExpandedVariants(q),...smartVariants(q)])].filter(Boolean).slice(0,13);
   let products=[],errors=[],seen=new Set(),backendUnavailable=false;
@@ -1583,8 +1595,8 @@ const familySearchKey='eiwitkcal-family-search-v1';
 let familySearch={terms:[],products:[]};
 try{const v=JSON.parse(localStorage.getItem(familySearchKey)||'{}');familySearch={terms:Array.isArray(v.terms)?v.terms:[],products:Array.isArray(v.products)?v.products:[]}}catch{}
 function familySearchMerge(a,b){
- const terms=[...(a?.terms||[]),...(b?.terms||[])].filter(x=>typeof x==='string'&&x.trim()).filter((x,i,arr)=>arr.findIndex(y=>norm(y)===norm(x))===i).slice(0,50);
- const products=[...(a?.products||[]),...(b?.products||[])].filter(p=>p&&typeof p.name==='string').filter((p,i,arr)=>arr.findIndex(x=>String(x.code||x.barcode||[x.name,x.brand,x.store].join('|')).toLowerCase()===String(p.code||p.barcode||[p.name,p.brand,p.store].join('|')).toLowerCase())===i).slice(0,70);
+ const terms=[...(a?.terms||[]),...(b?.terms||[])].filter(x=>typeof x==='string'&&x.trim()).filter((x,i,arr)=>arr.findIndex(y=>norm(y)===norm(x))===i);
+ const products=[...(a?.products||[]),...(b?.products||[])].filter(p=>p&&typeof p.name==='string').filter((p,i,arr)=>arr.findIndex(x=>String(x.code||x.barcode||[x.name,x.brand,x.store].join('|')).toLowerCase()===String(p.code||p.barcode||[p.name,p.brand,p.store].join('|')).toLowerCase())===i);
  return {terms,products};
 }
 function familySearchSave(){try{localStorage.setItem(familySearchKey,JSON.stringify(familySearch))}catch{};scheduleSync()}
@@ -1593,11 +1605,12 @@ function familyRememberProduct(p){if(!p?.name)return;familySearch=familySearchMe
 const favKey='eiwitkcal-vaak-gekozen-v1';let favorites=[];
 try{favorites=JSON.parse(localStorage.getItem(favKey)||'[]');if(!Array.isArray(favorites))favorites=[]}catch{}
 function rememberProduct(p){
+ saveProductToLibrary(p);
  const id=String(p.code||p.barcode||[p.name,p.brand,p.store].join('|')).toLocaleLowerCase('nl-NL');
  const old=favorites.find(x=>x.id===id);
  favorites=favorites.filter(x=>x.id!==id);
  favorites.unshift({id,product:p,count:(old?.count||0)+1,last:Date.now()});
- favorites=favorites.sort((a,b)=>b.count-a.count||b.last-a.last).slice(0,60);
+ favorites=favorites.sort((a,b)=>b.count-a.count||b.last-a.last);
  try{localStorage.setItem(favKey,JSON.stringify(favorites))}catch{}
 }
 // Live productvoorstellen uit de voedingsdatabase, naast lokale favorieten en zoekgeschiedenis.
@@ -1656,6 +1669,7 @@ function localSearchCandidates(q,store){
  featuredSearchProducts.forEach(p=>add(p,1));
  recentProducts.forEach(p=>add(p,4));
  familySearch.products.forEach(p=>add(p,5));
+ productLibrary.forEach(p=>add(p,7));
  explicitFavs.forEach(p=>add(p,5));
  favorites.forEach(f=>add(f.product,6));
  liveSuggestionProducts.forEach(p=>add(p,2));
@@ -1674,6 +1688,7 @@ function sharedTopProducts(store){
  explicitFavs.forEach((p,i)=>add(p,250-i*.01));
  recentProducts.forEach((p,i)=>add(p,200-i));
  familySearch.products.forEach((p,i)=>add(p,180-i));
+ productLibrary.slice(-500).forEach((p,i)=>add(p,170+i*.001));
  // Deze twee vaste gezinsproducten moeten ook zonder zoekterm zichtbaar zijn.
  for(const p of featuredSearchProducts)add(p,100);
  return [...found.values()].sort((a,b)=>b.score-a.score).slice(0,8);
@@ -2203,7 +2218,7 @@ function showAddConfirmation(){
 </script><script>
 // Extra gedeelde gegevens. Onafhankelijk van het bestaande dagboekprotocol.
 (function(){
- const keys=['julia-nutrient-product-overrides-v1','julia-preferred-product-barcodes-v1','julia-growth-measurements-v1','julia-analysis-settings-v1','julia-growth-reference-v1','julia-product-favorites-v1','julia-product-recent-v1','eiwitkcal-vaak-gekozen-v1'];
+ const keys=['eiwitkcal-productbibliotheek-v1','julia-nutrient-product-overrides-v1','julia-preferred-product-barcodes-v1','julia-growth-measurements-v1','julia-analysis-settings-v1','julia-growth-reference-v1','julia-product-favorites-v1','julia-product-recent-v1','eiwitkcal-vaak-gekozen-v1'];
  const queueKey='julia-shared-queue-v1',baseKey='julia-shared-base-v1';
  let queue=[],base={},busy=false,ready=false,lastError='';
  try{queue=JSON.parse(localStorage.getItem(queueKey)||'[]');if(!Array.isArray(queue))queue=[];queue=queue.filter(x=>keys.includes(x.key))}catch{queue=[]}
@@ -2213,11 +2228,14 @@ function showAddConfirmation(){
  const save=()=>{localStorage.setItem(queueKey,JSON.stringify(queue));localStorage.setItem(baseKey,JSON.stringify(base))};
  const id=p=>String(p?.code||p?.barcode||p?.id||[p?.name,p?.brand,p?.store].join('|')).toLowerCase();
  function merge(k,a,b){
+  if(k==='eiwitkcal-productbibliotheek-v1'){
+   const map=new Map();for(const p of [...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])])if(p?.name)map.set(id(p),{...(map.get(id(p))||{}),...p});return [...map.values()];
+  }
   if(k==='julia-product-favorites-v1'||k==='julia-product-recent-v1'){
-   const map=new Map();for(const p of [...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])])if(p&&typeof p==='object')map.set(id(p),p);return [...map.values()].slice(0,k.includes('favorites')?80:20);
+   const map=new Map();for(const p of [...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])])if(p&&typeof p==='object')map.set(id(p),p);return [...map.values()];
   }
   if(k==='eiwitkcal-vaak-gekozen-v1'){
-   const map=new Map();for(const p of [...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])])if(p&&p.id){const old=map.get(p.id);if(!old||Number(p.last||0)>Number(old.last||0))map.set(p.id,p)}return [...map.values()].sort((x,y)=>Number(y.last||0)-Number(x.last||0)).slice(0,60);
+   const map=new Map();for(const p of [...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])])if(p&&p.id){const old=map.get(p.id);if(!old||Number(p.last||0)>Number(old.last||0))map.set(p.id,p)}return [...map.values()].sort((x,y)=>Number(y.last||0)-Number(x.last||0));
   }
   if(k==='eiwitkcal-zoekgeschiedenis')return [...new Set([...(Array.isArray(a)?a:[]),...(Array.isArray(b)?b:[])])].slice(0,30);
   if(k==='julia-growth-measurements-v1'){
@@ -2229,6 +2247,7 @@ function showAddConfirmation(){
  function refresh(k,v){
   if(v===null||v===undefined)localStorage.removeItem(k);else localStorage.setItem(k,JSON.stringify(v));
   try{
+   if(k==='eiwitkcal-productbibliotheek-v1')productLibrary=Array.isArray(v)?v:[];
    if(k==='julia-product-favorites-v1')explicitFavs=Array.isArray(v)?v:[];
    if(k==='julia-product-recent-v1')recentProducts=Array.isArray(v)?v:[];
    if(k==='julia-favorite-meal-groups-v1')favoriteMealGroups=v||{};
@@ -2240,7 +2259,7 @@ function showAddConfirmation(){
    if(k==='julia-analysis-settings-v1')analysisSettings=v||{};
    if(k==='julia-growth-reference-v1')growthReferences=Array.isArray(v)?v:[];
    if(typeof renderQuickProducts==='function'&&(k.includes('favorites')||k.includes('recent')||k.includes('meal-groups')))renderQuickProducts();
-   if((k==='julia-product-favorites-v1'||k==='julia-product-recent-v1'||k==='eiwitkcal-vaak-gekozen-v1')&&document.activeElement===document.getElementById('query'))showSuggestions();
+   if((k==='eiwitkcal-productbibliotheek-v1'||k==='julia-product-favorites-v1'||k==='julia-product-recent-v1'||k==='eiwitkcal-vaak-gekozen-v1')&&document.activeElement===document.getElementById('query'))showSuggestions();
    if(k==='julia-growth-measurements-v1'||k==='julia-growth-reference-v1')if(typeof renderGrowth==='function')renderGrowth();
    if(k==='julia-analysis-settings-v1'&&typeof renderAnalysis==='function')renderAnalysis();
   }catch(e){console.warn('Weergave vernieuwen:',e)}
@@ -3249,6 +3268,15 @@ function init(){
  input.addEventListener('blur',sync);
 }
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>
+<script id="offlineAppRegistration">
+(function(){
+ if(!('serviceWorker' in navigator))return;
+ if(!/^https?:$/.test(location.protocol))return;
+ window.addEventListener('load',function(){
+   navigator.serviceWorker.register('./sw.js',{scope:'./'}).catch(function(err){console.warn('Offline installatie niet beschikbaar:',err)});
+ });
 })();
 </script>
 </body></html>
