@@ -1025,6 +1025,10 @@ function verifiedPortionFromProduct(p){
  const name=String(p.name||'').toLocaleLowerCase('nl-NL');
  const store=String(p.store||p.brand||'').toLocaleLowerCase('nl-NL');
  const pack=packageInfo(p);
+ // Autodrop Vegan Mini Cadillacs: 10 uitdeelzakjes in een verpakking van 200 g.
+ if(/autodrop/i.test(name)&&/vegan/i.test(name)&&/mini.*cadillac|cadillac.*mini/i.test(name)){
+  return {grams:20,source:'stuk',description:'10 mini-uitdeelzakjes van gemiddeld 20 g per zakje (200 g totaal), volgens de getoonde verpakking.'};
+ }
  // Pepernoten AH: voorlopig gemiddeld 2 g per stuk. Bij 6 g eiwit/100 g
  // is dit 0,12 g eiwit, afgerond 0,1 g. Het stukgewicht is een schatting.
  if(/\bpepernoten\b/i.test(name)&&/albert heijn|\bah\b/i.test(store)){
@@ -1443,7 +1447,14 @@ function searchExpandedVariants(q){
   }
  }
  const words=smartWords(q);if(words.length>1)variants.push(words.slice().reverse().join(' '));
- return [...new Set(variants.map(v=>v.trim()).filter(v=>v.length>=2))].slice(0,6);
+ // Als een winkel 'Autodrop vegan' niet kent, probeer ook het merk,
+ // de onderscheidende woorden en Nederlandse schrijfwijzen afzonderlijk.
+ if(words.length>1){
+  variants.push(words[0]);
+  variants.push(words.slice(0,2).join(' '));
+  for(const w of words.slice(1)){if(w.length>=4)variants.push(w)}
+ }
+ return [...new Set(variants.map(v=>v.trim()).filter(v=>v.length>=2))].slice(0,12);
 }
 // Begrijp natuurlijke Nederlandse productomschrijvingen en woordvolgorde.
 function productSearchVariants(q){
@@ -1474,7 +1485,7 @@ function productSearchScore(p,q){
  return base;
 }
 async function openFoodFactsFallback(q){
- const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),4500);
+ const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),8500);
  try{
   const fields='code,product_name,brands,nutriments,quantity,image_front_small_url';
   const urls=[
@@ -1501,7 +1512,7 @@ async function search(){
  // Toon lokale favorieten meteen, ook wanneer externe zoekdiensten traag of onbereikbaar zijn.
  for(const p of favMatches){const row=document.createElement('div');row.className='result';const detail=document.createElement('div');detail.className='details';const title=document.createElement('strong');title.textContent='⭐ '+p.name;const meta=document.createElement('div');meta.className='small';const shop=String(p.store||'').trim();meta.textContent=(shop||'Supermarkt onbekend')+' · '+fmtProtein(p.protein)+' g eiwit /100 g · '+fmt(p.kcal,0)+' kcal';const btn=document.createElement('button');btn.type='button';btn.textContent='Kies';btn.onclick=()=>{choose(p);$('calculator').scrollIntoView({behavior:'smooth',block:'start'})};detail.append(title,meta);row.append(detail,btn);$('results').append(row)}
  try{
-  const variants=[...new Set([...productSearchVariants(q),...searchExpandedVariants(q),...smartVariants(q)])].filter(Boolean).slice(0,9);
+  const variants=[...new Set([...productSearchVariants(q),...searchExpandedVariants(q),...smartVariants(q)])].filter(Boolean).slice(0,13);
   let products=[],errors=[],seen=new Set(),backendUnavailable=false;
   // Eerst de eigen zoekdienst; bij een fout of te weinig treffers ook Open Food Facts proberen.
   for(let i=0;i<variants.length;i++){
@@ -1513,7 +1524,7 @@ async function search(){
   }
   if(products.filter(p=>productSearchScore(p,q)>=20).length<5&&(store==='both'||store==='all'||store==='off')){
    try{
-    const offQueries=[...new Set([...productSearchVariants(q),...searchExpandedVariants(q)])].slice(0,7);
+    const offQueries=[...new Set([...productSearchVariants(q),...searchExpandedVariants(q)])].slice(0,12);
     for(const term of offQueries){
      let found=[];try{found=await openFoodFactsFallback(term)}catch(e){errors.push('Open Food Facts: '+(e.message||String(e)));continue}if(sequence!==smartSearchSequence)return;
      for(const p of found){const id='open food facts|'+productId(p);if(!seen.has(id)){seen.add(id);products.push(p)}}
@@ -1633,6 +1644,8 @@ function localSearchCandidates(q,store){
   const previous=found.get(key);
   if(!previous||priority>previous.priority||priority===previous.priority&&score>previous.score)found.set(key,{product:p,priority,score});
  };
+ const autodropMini={name:'Autodrop Vegan mini cadillacs uitdeelzak (10 mini zakjes)',brand:'Autodrop',store:'PLUS',protein:null,kcal:null,fat:null,carbs:null,sugar:null,portion:{grams:20,source:'stuk',verified:true},quantity:'200 g',piecesCount:10};
+ if(/autodrop|mini\s*zakjes|mini\s*cadillacs/i.test(smartNormalize(q)) && (store==='all'||store==='both'||store==='plus'||store==='off'||liveStoreMatches(autodropMini,store)))found.set('autodrop vegan mini cadillacs|plus',{product:autodropMini,priority:25,score:5000});
  if(terraDessertQuery(q)&&liveStoreMatches(terraDessertProduct,store))found.set('ah terra plantaardige dessert cheesecake bes|albert heijn',{product:terraDessertProduct,priority:20,score:5000});
  // Eigen producten hebben voorrang op het ingebouwde voorbeeld.
  if(smartWords(q).some(w=>w.length>=2&&('rijst'.startsWith(w)||w.startsWith('rijst'))))found.set('rijst|handmatig',{product:riceTemplateProduct,priority:10,score:2000});
