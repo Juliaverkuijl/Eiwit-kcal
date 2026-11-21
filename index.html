@@ -3196,7 +3196,44 @@ $('recipeSave').onclick=()=>{
 $('navRecipes').onclick=()=>showPage('recipes');
 const originalRecipeShowPage=showPage;
 showPage=function(page){originalRecipeShowPage(page);$('recipesPage').hidden=page!=='recipes';$('navRecipes').classList.toggle('active',page==='recipes');if(page==='recipes')recipeRender()};
-</script></body></html>
+</script>
+<style id="directProteinEdit20261121">
+#calculator .nutrientPrimary.proteinDirectEdit{position:relative}
+#calculator .proteinDirectLine{display:flex;align-items:center;gap:7px;margin-top:7px}
+#calculator .proteinDirectLine input{width:105px;max-width:65%;min-height:42px;border:2px solid #268967;border-radius:9px;background:#fff;padding:6px 9px;font-size:21px;font-weight:750;color:#12533e}
+#calculator .proteinDirectLine span{font-weight:700;color:#12533e}
+#calculator .proteinDirectHint{display:block;font-size:11px;margin-top:5px;color:#386d59}
+#calculator .proteinDirectEdit #protein{display:none}
+</style>
+<script id="directProteinEditLogic20261121">
+(function(){
+function init(){
+ const output=document.getElementById('protein'),base=document.getElementById('selectedProtein');
+ if(!output||!base||document.getElementById('directProteinPortion'))return;
+ const tile=output.closest('.nutrientPrimary');if(!tile)return;
+ tile.classList.add('proteinDirectEdit');
+ const line=document.createElement('div');line.className='proteinDirectLine';
+ const input=document.createElement('input');input.id='directProteinPortion';input.type='number';input.min='0';input.step='0.01';input.inputMode='decimal';input.setAttribute('aria-label','Eiwit in gram voor deze gegeten portie aanpassen');
+ const unit=document.createElement('span');unit.textContent='g';line.append(input,unit);
+ const hint=document.createElement('small');hint.className='proteinDirectHint';hint.textContent='Tik om eiwit voor deze portie aan te passen';
+ output.after(line,hint);
+ let editing=false;
+ function sync(){if(editing||document.activeElement===input)return;const val=output.textContent.trim();input.value=val==='—'?'':val.replace(/[^0-9,.-]/g,'').replace(',','.');}
+ new MutationObserver(sync).observe(output,{childList:true,characterData:true,subtree:true});sync();
+ input.addEventListener('input',()=>{
+  const amount=document.getElementById('amount'),mode=document.getElementById('mode'),piece=document.getElementById('pieceWeight');
+  const g=mode.value==='pieces'?Number(amount.value)*Number(piece.value):Number(amount.value);
+  const value=Number(input.value.replace(',','.'));
+  if(!input.value.trim()||!Number.isFinite(value)||value<0||!(g>0))return;
+  editing=true;base.value=String(Math.round(value*100/g*10000)/10000);
+  base.dispatchEvent(new Event('input',{bubbles:true}));editing=false;
+ });
+ input.addEventListener('blur',sync);
+}
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>
+</body></html>
 
 
 <style id="quickGramsStyle20261119">.quickGramsBox{padding:15px;border:2px solid #16865b;border-radius:14px;background:#f0faf5;margin:12px 0 16px}.quickGramsBox>label{font-size:17px;font-weight:850;color:#125c42;display:block;margin-bottom:9px}.quickGramsLine{display:flex;align-items:center;gap:12px}.quickGramsLine input{width:100%;max-width:210px;min-height:52px;font-size:24px;font-weight:800;border:2px solid #16865b;border-radius:10px;padding:8px 12px}.quickGramsLine span{font-size:17px;font-weight:700}.quickGramsBox .small{margin:7px 0 0}</style><style id="singlePortionInputFix20261116">
