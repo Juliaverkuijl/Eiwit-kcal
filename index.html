@@ -1756,7 +1756,7 @@ function loadSimpleScanner(){
  return window.__simpleScannerLoad;
 }
 async function scanWithZXingFallback(token){
- // ZXing leest de videostream rechtstreeks. Geen PNG-data-URL per camerabeeld.
+ // @zxing/library 0.20 gebruikt decodeFromVideoDevice (niet decodeFromConstraints).
  await loadZXing();
  if(!scanActive||token!==scanLoopId)return false;
  const holder=$('simpleBarcodeCamera'),video=$('scanVideo');
@@ -1766,40 +1766,39 @@ async function scanWithZXingFallback(token){
   hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,[ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8,ZXing.BarcodeFormat.UPC_A,ZXing.BarcodeFormat.UPC_E,ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.ITF]);
   hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
  }
- const reader=new ZXing.BrowserMultiFormatReader(hints,180);
- scanReader=reader;
- $('scanMessage').textContent='Camera starten — barcodeherkenning actief…';
+ const reader=new ZXing.BrowserMultiFormatReader(hints,250);scanReader=reader;
+ $('scanMessage').textContent='Reserve-scanner starten…';
  try{
-  const controls=await reader.decodeFromConstraints({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1080}}},video,(result,error)=>{
+  await reader.decodeFromVideoDevice(undefined,video,(result)=>{
    if(result&&scanActive&&token===scanLoopId)foundBarcode(result.getText());
   });
-  if(!scanActive||token!==scanLoopId){try{controls?.stop()}catch(e){};reader.reset();return false}
-  scanControls=controls;
-  scanStream=video.srcObject;
-  scannerControls();
-  $('scanMessage').textContent='Camera actief — houd de barcode scherp en volledig in beeld.';
+  if(!scanActive||token!==scanLoopId){reader.reset();return false}
+  scanStream=video.srcObject;scannerControls();
+  $('scanMessage').textContent='Camera actief — richt op de volledige barcode.';
   return true;
- }catch(e){try{reader.reset()}catch(_){};if(scanReader===reader)scanReader=null;throw e}
+ }catch(e){try{reader.reset()}catch(_){}if(scanReader===reader)scanReader=null;throw e}
 }
 async function scanWithZXing(token){
- // ZXing is de primaire live decoder; html5-qrcode is alleen een reserveoptie.
- try{return await scanWithZXingFallback(token)}
- catch(primaryError){
-  if(!scanActive||token!==scanLoopId)return false;
-  $('scanMessage').textContent='Alternatieve scanner starten…';
+ // Gebruik de bewezen html5-qrcode live scanner eerst; ZXing is reserve.
+ try{
   await loadSimpleScanner();
   if(!scanActive||token!==scanLoopId)return false;
   const video=$('scanVideo'),holder=$('simpleBarcodeCamera');video.hidden=true;holder.hidden=false;
   const scanner=new Html5Qrcode('simpleBarcodeCamera',{verbose:false});simpleScanner=scanner;
   const f=window.Html5QrcodeSupportedFormats;
-  const config={fps:15,disableFlip:false,videoConstraints:{facingMode:'environment'}};
+  const config={fps:12,qrbox:(w,h)=>({width:Math.max(180,Math.min(w-20,320)),height:Math.max(90,Math.min(h-20,150))}),aspectRatio:1.777778,disableFlip:false};
   if(f)config.formatsToSupport=[f.EAN_13,f.EAN_8,f.UPC_A,f.UPC_E,f.CODE_128,f.ITF].filter(x=>x!==undefined);
   await scanner.start({facingMode:'environment'},config,decoded=>{
    if(scanActive&&token===scanLoopId)foundBarcode(decoded);
   },()=>{});
-  if(!scanActive||token!==scanLoopId){try{await scanner.stop()}catch(e){};try{scanner.clear()}catch(e){};return false}
-  $('scanMessage').textContent='Camera actief — barcodeherkenning actief.';
+  if(!scanActive||token!==scanLoopId){try{await scanner.stop()}catch(e){}try{scanner.clear()}catch(e){}return false}
+  $('scanMessage').textContent='Camera actief — houd de streepjescode binnen het kader.';
   return true;
+ }catch(primaryError){
+  if(simpleScanner){try{await simpleScanner.stop()}catch(e){}try{simpleScanner.clear()}catch(e){}simpleScanner=null}
+  if(!scanActive||token!==scanLoopId)return false;
+  $('scanMessage').textContent='Reserve-scanner starten…';
+  return await scanWithZXingFallback(token);
  }
 }
 // Barcodefoto's worden alleen lokaal verwerkt; er wordt geen afbeelding geüpload.
