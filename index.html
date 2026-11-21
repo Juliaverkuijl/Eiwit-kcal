@@ -574,7 +574,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 #quickPanel,#jumpFavorites,#jumpRecent{display:none!important}
 #productPage .suggestions{max-height:min(390px,55vh);overflow-y:auto}
 </style><style id="compactBarcodeScanner20261118">
-/* Alleen afmetingen en presentatie: bestaande scannerlogica ongemoeid. */
+/* Scannerweergave: verborgen video mag niet zichtbaar blijven. */
+#productPage #scanVideo[hidden],#productPage #simpleBarcodeCamera[hidden]{display:none!important}
 #productPage #productScanQuick2026 button{min-width:0;min-height:43px;padding:8px 3px;font-size:12px;line-height:1.2;white-space:normal}
 #productPage #scanArea{max-width:100%;margin-top:8px!important}
 #productPage #scanArea .ios-scan-view{height:190px!important;max-height:190px!important;min-height:0!important;overflow:hidden!important;border-radius:12px}
@@ -1787,31 +1788,35 @@ async function scanWithZXingFallback(token){
   });
   if(!scanActive||token!==scanLoopId){reader.reset();return false}
   scanStream=video.srcObject;scannerControls();
+  if(!scanStream || !scanStream.getVideoTracks().some(t=>t.readyState==='live'))throw Error('Geen actief camerabeeld');
+  try{await video.play()}catch(e){throw Error('Camerabeeld kan niet worden afgespeeld: '+e.message)}
   $('scanMessage').textContent='Camera actief — richt op de volledige barcode.';
   return true;
  }catch(e){try{reader.reset()}catch(_){}if(scanReader===reader)scanReader=null;throw e}
 }
 async function scanWithZXing(token){
- // Gebruik de bewezen html5-qrcode live scanner eerst; ZXing is reserve.
+ // iPhone: eerst de eigen video met ZXing gebruiken; html5-qrcode alleen als reserve.
  try{
-  await loadSimpleScanner();
-  if(!scanActive||token!==scanLoopId)return false;
-  const video=$('scanVideo'),holder=$('simpleBarcodeCamera');video.hidden=true;holder.hidden=false;
-  const scanner=new Html5Qrcode('simpleBarcodeCamera',{verbose:false});simpleScanner=scanner;
-  const f=window.Html5QrcodeSupportedFormats;
-  const config={fps:12,qrbox:(w,h)=>({width:Math.max(180,Math.min(w-20,320)),height:Math.max(90,Math.min(h-20,150))}),aspectRatio:1.777778,disableFlip:false};
-  if(f)config.formatsToSupport=[f.EAN_13,f.EAN_8,f.UPC_A,f.UPC_E,f.CODE_128,f.ITF].filter(x=>x!==undefined);
-  await scanner.start({facingMode:'environment'},config,decoded=>{
-   if(scanActive&&token===scanLoopId)foundBarcode(decoded);
-  },()=>{});
-  if(!scanActive||token!==scanLoopId){try{await scanner.stop()}catch(e){}try{scanner.clear()}catch(e){}return false}
-  $('scanMessage').textContent='Camera actief — houd de streepjescode binnen het kader.';
-  return true;
- }catch(primaryError){
-  if(simpleScanner){try{await simpleScanner.stop()}catch(e){}try{simpleScanner.clear()}catch(e){}simpleScanner=null}
-  if(!scanActive||token!==scanLoopId)return false;
-  $('scanMessage').textContent='Reserve-scanner starten…';
   return await scanWithZXingFallback(token);
+ }catch(zxingError){
+  if(!scanActive||token!==scanLoopId)return false;
+  $('scanMessage').textContent='Andere cameramethode proberen…';
+  try{
+   await loadSimpleScanner();
+   if(!scanActive||token!==scanLoopId)return false;
+   const video=$('scanVideo'),holder=$('simpleBarcodeCamera');
+   video.hidden=true;holder.hidden=false;
+   const scanner=new Html5Qrcode('simpleBarcodeCamera',{verbose:false});simpleScanner=scanner;
+   const f=window.Html5QrcodeSupportedFormats;
+   const config={fps:12,qrbox:(w,h)=>({width:Math.max(180,Math.min(w-20,320)),height:Math.max(90,Math.min(h-20,150))}),disableFlip:false};
+   if(f)config.formatsToSupport=[f.EAN_13,f.EAN_8,f.UPC_A,f.UPC_E,f.CODE_128,f.ITF].filter(x=>x!==undefined);
+   await scanner.start({facingMode:'environment'},config,decoded=>{
+    if(scanActive&&token===scanLoopId)foundBarcode(decoded);
+   },()=>{});
+   if(!scanActive||token!==scanLoopId){try{await scanner.stop()}catch(e){}try{scanner.clear()}catch(e){}return false}
+   $('scanMessage').textContent='Camera actief — houd de barcode binnen het kader.';
+   return true;
+  }catch(otherError){throw Error('Camera niet beschikbaar: '+(otherError?.message||zxingError?.message||String(otherError)))}
  }
 }
 // Barcodefoto's worden alleen lokaal verwerkt; er wordt geen afbeelding geüpload.
