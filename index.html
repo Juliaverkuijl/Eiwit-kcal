@@ -1696,8 +1696,8 @@ function sharedTopProducts(store){
 function showSuggestions(){
  const q=$('query').value.trim(),box=$('suggestions'),store=$('store').value;
  box.replaceChildren();let shown=0;
- if(q.length===1){hideSuggestions();return;}
- const candidates=q.length>=2?localSearchCandidates(q,store):sharedTopProducts(store);
+ if(!q){hideSuggestions();return;}
+ const candidates=localSearchCandidates(q,store);
  for(const {product:p,priority} of candidates){
    const b=document.createElement('button');b.type='button';b.className='suggestion';
    const t=document.createElement('span');t.textContent=(priority>=5?'⭐ ':priority===4?'🕘 ':'🔎 ')+p.name;
