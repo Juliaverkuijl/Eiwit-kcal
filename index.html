@@ -3270,6 +3270,42 @@ function init(){
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
 })();
 </script>
+
+<style id="directKcalEdit20261122">
+#calculator .kcalDirectLine{display:flex;align-items:center;gap:8px;margin-top:7px}
+#calculator .kcalDirectLine input{width:125px;max-width:70%;min-height:42px;border:2px solid #268967;border-radius:9px;background:white;padding:6px 9px;font-size:21px;font-weight:750;color:#12533e}
+#calculator .kcalDirectLine span{font-weight:700;color:#12533e}
+#calculator .kcalDirectHint{display:block;font-size:11px;margin-top:5px;color:#386d59}
+#calculator .kcalDirectEdit #kcal{display:none}
+</style>
+<script id="directKcalEditLogic20261122">
+(function(){
+ function init(){
+  const output=document.getElementById('kcal'),base=document.getElementById('selectedKcal');
+  if(!output||!base||document.getElementById('directKcalPortion'))return;
+  const tile=output.closest('.nutrientPrimary');if(!tile)return;
+  tile.classList.add('kcalDirectEdit');
+  const line=document.createElement('div');line.className='kcalDirectLine';
+  const input=document.createElement('input');input.id='directKcalPortion';input.type='number';input.min='0';input.step='0.1';input.inputMode='decimal';input.setAttribute('aria-label','Calorieën voor deze gegeten portie aanpassen');
+  const unit=document.createElement('span');unit.textContent='kcal';line.append(input,unit);
+  const hint=document.createElement('small');hint.className='kcalDirectHint';hint.textContent='Tik om calorieën voor deze portie aan te passen';
+  output.after(line,hint);
+  let editing=false;
+  function sync(){if(editing||document.activeElement===input)return;const val=output.textContent.trim();input.value=val==='—'?'':val.replace(/[^0-9,.-]/g,'').replace(',','.');}
+  new MutationObserver(sync).observe(output,{childList:true,characterData:true,subtree:true});sync();
+  input.addEventListener('input',()=>{
+   const amount=document.getElementById('amount'),mode=document.getElementById('mode'),piece=document.getElementById('pieceWeight');
+   const g=mode.value==='pieces'?Number(amount.value)*Number(piece.value):Number(amount.value);
+   const value=Number(input.value.replace(',','.'));
+   if(!input.value.trim()||!Number.isFinite(value)||value<0||!(g>0))return;
+   editing=true;base.value=String(Math.round(value*100/g*10000)/10000);
+   base.dispatchEvent(new Event('input',{bubbles:true}));editing=false;
+  });
+  input.addEventListener('blur',sync);
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init,{once:true});else init();
+})();
+</script>
 <script id="offlineAppRegistration">
 (function(){
  if(!('serviceWorker' in navigator))return;
