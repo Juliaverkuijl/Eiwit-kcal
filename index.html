@@ -2513,7 +2513,7 @@ const dash=$('dashboardPage'),mount=$('premiumDashboardMount'),sync=$('syncPanel
 if(dash&&mount){
  const statusMount=document.createElement('div');statusMount.id='eiwitSyncMount';dash.insertBefore(statusMount,mount);if(sync)statusMount.appendChild(sync);
  const hero=document.createElement('div');hero.className='eiwitHeroGrid';hero.innerHTML='<div class="eiwitHero" id="eiwitProteinHero"><div class="heroLabel">🍴 Eiwit · NOG OVER</div><strong class="heroValue" id="eiwitProteinValue">0 g</strong><div class="heroGoal" id="eiwitProteinGoal">van 21 g</div><div class="heroBar"><i id="eiwitProteinBar"></i></div><div class="heroPercent" id="eiwitProteinPct">0%</div></div><div class="eiwitHero" id="eiwitKcalHero"><div class="heroLabel">🔥 Kcal · NOG NODIG</div><strong class="heroValue" id="eiwitKcalValue">0 kcal</strong><div class="heroGoal" id="eiwitKcalGoal">van 1.500 kcal</div><div class="heroBar"><i id="eiwitKcalBar"></i></div><div class="heroPercent" id="eiwitKcalPct">0%</div></div>';dash.insertBefore(hero,mount);
- const actions=document.createElement('div');actions.className='eiwitQuickActions';actions.innerHTML='<button type="button" data-action="add">🔎 Zoeken</button><button type="button" data-action="scan">▥ Barcode</button>';dash.insertBefore(actions,mount);
+ const actions=document.createElement('div');actions.className='eiwitQuickActions';actions.innerHTML='<button type="button" data-action="add">🔎 Zoeken</button><button type="button" data-action="scan"><svg class="dashboardBarcodeIcon" viewBox="0 0 42 32" width="31" height="26" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg"><g fill="currentColor"><rect x="2" y="3" width="3" height="26" rx=".6"/><rect x="8" y="3" width="1.7" height="26"/><rect x="12" y="3" width="4" height="26" rx=".6"/><rect x="19" y="3" width="2" height="26"/><rect x="24" y="3" width="4.5" height="26" rx=".6"/><rect x="31" y="3" width="1.7" height="26"/><rect x="35" y="3" width="4" height="26" rx=".6"/></g></svg><span>Barcode</span></button>';dash.insertBefore(actions,mount);
  actions.addEventListener('click',e=>{const btn=e.target.closest('button');if(!btn)return;const action=btn.dataset.action;
  // Only when entering product search from the dashboard, preselect the meal by local clock.
  // The user can still change the meal manually before saving.
@@ -3407,6 +3407,8 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 <style id="dashboardReadableQuickActions20261123">
 #dashboardPage .eiwitQuickActions button[data-action="add"],
 #dashboardPage .eiwitQuickActions button[data-action="scan"]{font-size:clamp(14px,3.7vw,17px)!important;font-weight:850!important;line-height:1.2!important;min-height:48px!important;padding:10px 6px!important;color:#075b38!important;background:#fff!important;letter-spacing:0!important;}
+#dashboardPage .eiwitQuickActions button[data-action="scan"]{gap:9px!important;}
+#dashboardPage .eiwitQuickActions .dashboardBarcodeIcon{display:block;flex:none;width:31px;height:26px;color:#08783d;}
 </style>
 </body></html>
 
