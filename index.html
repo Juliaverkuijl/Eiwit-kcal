@@ -2470,7 +2470,12 @@ function updateMeals(){
   const mealMatch=headText.match(/([\d.,]+)\s*g\s*eiwit\s*[·•-]\s*([\d.,]+)\s*kcal/i);
   const icon=/ochtend/i.test(name)?'🌅':/middag/i.test(name)?'☀️':/avond/i.test(name)?'🌙':(name.match(/^[^\p{L}\p{N}]+/u)?.[0]?.trim()||'🍽️');
   const mealTitle=name.replace(/^[^\p{L}\p{N}]+/u,'').trim();
-  const label=document.createElement('span');label.className='dashboard-meal-label';label.textContent=icon+' '+mealTitle;
+  const label=document.createElement('span');label.className='dashboard-meal-label';
+  if(/ochtend/i.test(name)){
+   const sunrise=document.createElement('span');sunrise.className='dashboard-sunrise-icon';sunrise.setAttribute('aria-hidden','true');
+   sunrise.innerHTML='<svg viewBox="0 0 32 32" width="25" height="25" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 24H27" stroke="#F9C53B" stroke-width="2.8" stroke-linecap="round"/><path d="M9 24a7 7 0 0 1 14 0" fill="#FFD447" stroke="#FFB323" stroke-width="2"/><path d="M16 3v5M4.7 11l3.6 3.3M27.3 11l-3.6 3.3M3 19h4M25 19h4" stroke="#FFD447" stroke-width="2.8" stroke-linecap="round"/></svg>';
+   label.append(sunrise,document.createTextNode(mealTitle));
+  }else label.textContent=icon+' '+mealTitle;
   const totals=document.createElement('span');totals.className='dashboard-meal-totals';
   if(mealMatch){const p=document.createElement('strong');p.textContent=mealMatch[1]+' g eiwit';const k=document.createElement('strong');k.textContent=mealMatch[2]+' kcal';totals.append(p,k)}else totals.textContent=headText.replace(name,'').trim();
   const chevron=document.createElement('span');chevron.className='dashboard-meal-chevron';chevron.textContent='⌄';chevron.setAttribute('aria-hidden','true');
@@ -3432,3 +3437,8 @@ leftover.addEventListener('input',()=>{
 amount.addEventListener('input',reset);quick.addEventListener('input',reset);mode.addEventListener('change',reset);if(chosen)new MutationObserver(reset).observe(chosen,{childList:true,characterData:true,subtree:true});
 })();
 </script>
+<style id="dashboardSunriseAndGoalEmphasis20261123">
+#dashboardPage .dashboard-sunrise-icon{display:inline-flex;align-items:center;justify-content:center;flex:none;width:25px;height:25px;margin-right:5px;vertical-align:middle}
+#dashboardPage .dashboard-meal-label{display:inline-flex;align-items:center}
+#dashboardPage .eiwitHero .heroGoal{font-size:clamp(11px,2.9vw,13px)!important;font-weight:750!important;color:#345b4a!important;opacity:1!important;letter-spacing:.05px!important}
+</style>
