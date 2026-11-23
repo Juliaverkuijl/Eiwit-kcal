@@ -3485,6 +3485,28 @@ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',
 #dashboardPage .eiwitQuickActions button[data-action="scan"]{gap:9px!important;}
 #dashboardPage .eiwitQuickActions .dashboardBarcodeIcon{display:block;flex:none;width:31px;height:26px;color:#08783d;}
 </style>
+
+<style id="dashboardMobileRefinement20261123">
+/* 1. Ringinhoud blijft ook op kleine iPhones binnen de cirkel. */
+#dashboardPage .eiwitHeroGrid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:clamp(8px,2vw,16px)!important}
+#dashboardPage .eiwitHero{box-sizing:border-box!important;width:100%!important;min-width:0!important;aspect-ratio:1!important;padding:12px 11px!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;text-align:center!important}
+#dashboardPage .eiwitHero .heroLabel{font-size:clamp(12px,3.6vw,18px)!important;line-height:1.1!important}
+#dashboardPage .eiwitHero .heroValue{font-size:clamp(19px,5.2vw,29px)!important;line-height:1.08!important;letter-spacing:-.6px!important;max-width:100%!important;white-space:nowrap!important}
+#dashboardPage .eiwitHero .heroGoal{font-size:clamp(10px,2.8vw,13px)!important;line-height:1.2!important;max-width:100%!important}
+#dashboardPage .eiwitHero .heroPercent{font-size:clamp(17px,4.8vw,25px)!important;line-height:1.1!important}
+/* 2. Statusregel compact en goed leesbaar. */
+#dashboardPage .dashboard-sync-status{max-width:100%!important;overflow-wrap:anywhere!important}
+/* 3. Maaltijdregels met een ruime aanraakzone en leesbare totalen. */
+#dashboardPage .premium-meals-card{padding:14px!important}
+#dashboardPage .premium-meal-row{min-height:62px!important;box-sizing:border-box!important;line-height:1.3!important}
+/* 4. Zoek- en barcodeknoppen passen naast elkaar. */
+#dashboardPage .premium-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:9px!important}
+#dashboardPage .premium-actions button{min-width:0!important;max-width:100%!important}
+/* 5. Compacte mobiele indeling zonder horizontaal scrollen. */
+#dashboardPage{max-width:100%!important;min-width:0!important;overflow-x:clip!important}
+#dashboardPage .dashboardDateBar{max-width:100%!important;box-sizing:border-box!important}
+@media(max-width:375px){#dashboardPage .eiwitHero{padding:8px 8px!important}#dashboardPage .eiwitHeroGrid{gap:7px!important}#dashboardPage .premium-meals-card{padding:11px!important}}
+</style>
 </body></html>
 
 
