@@ -2818,8 +2818,8 @@ function init(){
  if(!title||!picker||!prev||!next||!close)return;
  const today=()=>localDate();
  const format=d=>new Date(d+'T12:00:00').toLocaleDateString('nl-NL',{weekday:'short',day:'numeric',month:'short'});
- function refresh(){const d=currentDate;title.textContent=(d===today()?'Vandaag · ':'')+format(d);picker.value=d;picker.max=today();next.disabled=d>=today();const locked=isDayLocked(d);close.textContent=locked?'🔒 Dag afgesloten · heropenen':'🔒 Dag afsluiten';close.classList.toggle('locked',locked)}
- function select(d){if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||d>today())return;window.eiwitBrowsingDate=d!==today();loadDay(d);totals();refresh();if(typeof renderPremiumDashboard==='function')renderPremiumDashboard();}
+ function refresh(){const d=currentDate;title.textContent=(d===today()?'Vandaag · ':'')+format(d);picker.value=d;picker.removeAttribute('max');next.disabled=false;const locked=isDayLocked(d);close.textContent=locked?'🔒 Dag afgesloten · heropenen':'🔒 Dag afsluiten';close.classList.toggle('locked',locked)}
+ function select(d){if(!/^\d{4}-\d{2}-\d{2}$/.test(d) )return;window.eiwitBrowsingDate=d!==today();loadDay(d);totals();refresh();if(typeof renderPremiumDashboard==='function')renderPremiumDashboard();}
  function step(n){const d=new Date(currentDate+'T12:00:00');d.setDate(d.getDate()+n);select([d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'))}
  prev.addEventListener('click',()=>step(-1));next.addEventListener('click',()=>step(1));
  title.addEventListener('click',()=>window.eiwitOpenCalendar?.());
@@ -2980,10 +2980,10 @@ function render(){
   if(date===chosen)b.classList.add('selected');
   if(date===now)b.classList.add('today');
   if(diary?.[date]?.closed===true && Array.isArray(diary[date].entries) && diary[date].entries.length>0)b.classList.add('is-closed');
-  if(date>now)b.disabled=true;
+  // Ook toekomstige dagen zijn te selecteren voor maaltijdplanning.
   b.onclick=()=>pick(date);days.appendChild(b);
  }
- e.querySelector('#eiwitCalNext').disabled=iso(viewYear,viewMonth,1)>iso(Number(now.slice(0,4)),Number(now.slice(5,7))-1,1)||viewYear===Number(now.slice(0,4))&&viewMonth===Number(now.slice(5,7))-1;
+ e.querySelector('#eiwitCalNext').disabled=false;
 }
 window.eiwitOpenCalendar=function(){
  chosen=currentDate;const d=new Date(chosen+'T12:00:00');viewYear=d.getFullYear();viewMonth=d.getMonth();
