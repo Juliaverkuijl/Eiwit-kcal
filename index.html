@@ -898,16 +898,16 @@ function renderHistory(){
   $('historyCustomDates').hidden=period!=='custom';
   $('historyChartTitle').textContent=period==='all'?'Alle geregistreerde dagen':period==='custom'?'Gekozen periode':'Laatste '+period+' dagen';
   const dates=Object.keys(diary).filter(d=>/^\d{4}-\d{2}-\d{2}$/.test(d)).sort().reverse();
-  const stats=dates.filter(date=>(!start||date>=start)&&(!end||date<=end)).map(date=>{
+  const stats=dates.filter(date=>diary[date]?.closed&&(!start||date>=start)&&(!end||date<=end)).map(date=>{
     const day=diary[date]||{};
     const entries=Array.isArray(day.entries)?day.entries:[];
     return {date,p:entries.reduce((sum,x)=>sum+(Number(x.p)||0),0),k:entries.reduce((sum,x)=>sum+(Number(x.k)||0),0),entries,closed:!!day.closed};
   });
-  const recorded=stats.filter(x=>x.entries.length);
+  const recorded=stats;
   $('avgProtein').textContent=recorded.length?fmtProtein(recorded.reduce((sum,x)=>sum+x.p,0)/recorded.length)+' g':'—';
   $('avgKcal').textContent=recorded.length?fmt(recorded.reduce((sum,x)=>sum+x.k,0)/recorded.length,0)+' kcal':'—';
   const description=$('historyPeriodDescription');
-  description.textContent=period==='custom'&&start&&end&&start>end?'De begindatum ligt na de einddatum.':recorded.length+' dag(en) met registraties in deze periode. Gemiddelden tellen alleen dagen met producten mee.';
+  description.textContent=period==='custom'&&start&&end&&start>end?'De begindatum ligt na de einddatum.':recorded.length+' dag(en) met registraties in deze periode. Gemiddelden tellen alleen afgesloten dagen mee.';
   const rows=$('historyRows');rows.replaceChildren();
   if(!stats.length){const empty=document.createElement('p');empty.className='histEmpty';empty.textContent='Geen geregistreerde dagen in deze periode. Kies hierboven een datum om achteraf producten toe te voegen.';rows.append(empty)}
   for(const x of stats){
@@ -982,7 +982,7 @@ function trendPeriodDays(){
  if(!end||start>end)return [];
  const result=[],d=new Date(start+'T12:00:00'),last=new Date(end+'T12:00:00');
  while(d<=last&&result.length<3660){result.push([d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-'));d.setDate(d.getDate()+1);}
- return result;
+ return result.filter(date=>diary[date]?.closed);
 }
 // Alleen een visuele analyse van bestaande registraties. Geen wijzigingen aan synchronisatie of opslag.
 let lastMealTrendStats=[];
@@ -996,21 +996,21 @@ function renderMealTrend(stats){
     const entries=Array.isArray(diary[date]?.entries)?diary[date].entries:[];
     return {date,total:entries.reduce((sum,e)=>sum+(Number(metric==='protein'?e.p:e.k)||0),0),registered:entries.length>0};
   });
-  if(!days.length){holder.textContent='Geen dagen in deze periode.';return;}
+  if(!days.length){holder.textContent='Geen afgesloten dagen in deze periode.';return;}
   const norm=Number($(metric==='protein'?'limit':'kcalGoal').value)|| (metric==='protein'?21.5:1500);
   const peak=Math.max(1,norm,...days.map(d=>d.total));
   const max=Math.max(metric==='protein'?5:100,metric==='protein'?Math.ceil(peak/5)*5:Math.ceil(peak/100)*100);
   const visibleWidth=Math.max(260,holder.clientWidth||300);
-  const width=Math.max(visibleWidth,Math.ceil(days.length/7*visibleWidth)),height=188,left=28,right=18,top=20,bottom=32,pw=width-left-right,ph=height-top-bottom;
+  const width=Math.max(visibleWidth,Math.ceil(days.length/14*visibleWidth)),height=160,left=3,right=3,top=34,bottom=32,pw=width-left-right,ph=height-top-bottom;
   const x=i=>left+(i+.5)*pw/days.length;
   const y=v=>top+ph*(1-v/max);
   const NS='http://www.w3.org/2000/svg';
   const svg=document.createElementNS(NS,'svg');
   svg.setAttribute('viewBox',`0 0 ${width} ${height}`);
   svg.setAttribute('width',String(width));svg.setAttribute('height',String(height));
-  svg.setAttribute('role','img');svg.setAttribute('aria-label','Dagtotaal '+unit+' voor de laatste zeven kalenderdagen');
+  svg.setAttribute('role','img');svg.setAttribute('aria-label','Dagtotaal '+unit+' voor afgesloten dagen in de geselecteerde periode');
   const add=(tag,attrs,parent=svg)=>{const n=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,String(v));parent.append(n);return n;};
-  const txt=(px,py,value,anchor='middle')=>{const n=add('text',{x:px,y:py,'text-anchor':anchor,fill:'#61736b','font-size':10});n.textContent=value;};
+  const txt=(px,py,value,anchor='middle')=>{const n=add('text',{x:px,y:py,'text-anchor':anchor,fill:'#61736b','font-size':days.length>9?8:10});n.textContent=value;};
   for(let i=0;i<=4;i++){const v=max*i/4;add('line',{x1:left,y1:y(v),x2:width-right,y2:y(v),stroke:'#dfe9e3','stroke-width':1});}
   const normY=y(norm);
   add('line',{x1:left,y1:normY,x2:width-right,y2:normY,stroke:'#2878b8','stroke-width':1.7,'stroke-dasharray':'5 4'});
@@ -1025,11 +1025,11 @@ function renderMealTrend(stats){
     const barColor=!d.registered?'#b8c8c0':good?'#23846e':'#d64545';
     const barWidth=Math.min(28,pw/days.length*.68);
     const bar=add('rect',{x:x(i)-barWidth/2,y:y(d.total),width:barWidth,height:Math.max(0,ph*d.total/max),fill:barColor,rx:3});
-    const valueLabel=add('text',{x:x(i),y:Math.max(11,y(d.total)-5),'text-anchor':'middle',fill:barColor,'font-size':10,'font-weight':'bold'});valueLabel.textContent=d.registered?(metric==='protein'?fmtProtein(d.total):fmt(d.total,0)):'–';
+    const valueLabel=add('text',{x:x(i),y:Math.max(11,y(d.total)-5),'text-anchor':'middle',fill:barColor,'font-size':days.length>9?8:10,'font-weight':'bold',transform:days.length>9?`rotate(-60 ${x(i)} ${Math.max(11,y(d.total)-5)})`:''});valueLabel.textContent=d.registered?(metric==='protein'?fmtProtein(d.total):fmt(d.total,0)):'–';
     const tooltip=add('title',{},bar);tooltip.textContent=`${d.date}: ${metric==='protein'?fmtProtein(d.total):fmt(d.total,0)} ${unit}${d.registered?'':' (geen registratie)'}`;
   });
   holder.style.overflowX='auto';holder.style.width='100%';holder.append(svg);holder.scrollLeft=holder.scrollWidth;
-  $('mealTrendNote').textContent='Geselecteerde periode · veeg naar links voor oudere dagen. Stippellijn = '+(metric==='protein'?'eiwitlimiet ':'kcal-doel ')+(metric==='protein'?fmtProtein(norm):fmt(norm,0))+' '+unit+'. Groen = '+(metric==='protein'?'op of onder de limiet':'doel gehaald')+'; rood = '+(metric==='protein'?'boven de limiet':'onder het doel')+'. Vandaag kan nog onvolledig zijn. Geen registratie wordt als 0 getoond.';
+  $('mealTrendNote').textContent='Geselecteerde periode · veeg naar links voor oudere dagen. Stippellijn = '+(metric==='protein'?'eiwitlimiet ':'kcal-doel ')+(metric==='protein'?fmtProtein(norm):fmt(norm,0))+' '+unit+'. Groen = '+(metric==='protein'?'op of onder de limiet':'doel gehaald')+'; rood = '+(metric==='protein'?'boven de limiet':'onder het doel')+'. Alleen afgesloten dagen worden getoond.';
 }
 let lastExtraNutrientStats=[];
 function renderExtraNutrientTrend(stats,targetHolder=null,targetField=null,targetNote=null){
@@ -1057,7 +1057,7 @@ function renderExtraNutrientTrend(stats,targetHolder=null,targetField=null,targe
   holder.append(normInfo);
   const goal=guide.max??guide.min??null;
   const visibleWidth=Math.max(260,holder.clientWidth||300);
-  const width=Math.max(visibleWidth,Math.ceil(days.length/7*visibleWidth)),height=188,L=28,R=18,T=22,B=32;
+  const width=Math.max(visibleWidth,Math.ceil(days.length/14*visibleWidth)),height=160,L=3,R=3,T=15,B=32;
   const max=Math.max(1,...days.filter(d=>d.count>0).map(d=>d.sum),goal||0)*1.15;
   const ns='http://www.w3.org/2000/svg';
   const svg=document.createElementNS(ns,'svg');svg.setAttribute('viewBox',`0 0 ${width} ${height}`);svg.setAttribute('width',String(width));svg.setAttribute('height',String(height));svg.setAttribute('role','img');svg.setAttribute('aria-label',`${label} per dag; onbekende waarden zijn niet als nul getekend`);
@@ -1070,7 +1070,7 @@ function renderExtraNutrientTrend(stats,targetHolder=null,targetField=null,targe
     el('line',{x1:L,y1:yy,x2:width-R,y2:yy,stroke:'#2878b8','stroke-width':2,'stroke-dasharray':'6 4'});
     // Richtwaarde staat leesbaar boven de grafiek; geen overlappende cijfers op de normlijn.
   }
-  days.forEach((d,i)=>{const x=L+(i+.5)*plotW/days.length,bw=Math.min(30,plotW/days.length*.65);if(d.count>0){const h=plotH*d.sum/max;const rect=el('rect',{x:x-bw/2,y:y(d.sum),width:bw,height:Math.max(1,h),rx:3,fill:'#429b73'});rect.appendChild(document.createElementNS(ns,'title')).textContent=`${d.date}: ${fmt(d.sum,1)} g${d.count<d.total?' (gedeeltelijk)':''}`;if(d.count<d.total)el('text',{x,y:Math.max(10,y(d.sum)-4),'text-anchor':'middle','font-size':13,fill:'#426a58'},'*');}else{el('text',{x,y:height-B-9,'text-anchor':'middle','font-size':16,fill:'#7e8b83'},'–');}el('text',{x,y:height-18,'text-anchor':'middle','font-size':10,fill:'#52645b'},d.date.slice(8)+'/'+d.date.slice(5,7));});
+  days.forEach((d,i)=>{const x=L+(i+.5)*plotW/days.length,bw=Math.min(30,plotW/days.length*.65);if(d.count>0){const h=plotH*d.sum/max;const rect=el('rect',{x:x-bw/2,y:y(d.sum),width:bw,height:Math.max(1,h),rx:3,fill:'#429b73'});rect.appendChild(document.createElementNS(ns,'title')).textContent=`${d.date}: ${fmt(d.sum,1)} g${d.count<d.total?' (gedeeltelijk)':''}`;if(d.count<d.total)el('text',{x,y:Math.max(10,y(d.sum)-4),'text-anchor':'middle','font-size':13,fill:'#426a58'},'*');}else{el('text',{x,y:height-B-9,'text-anchor':'middle','font-size':16,fill:'#7e8b83'},'–');}el('text',{x,y:height-18,'text-anchor':'middle','font-size':days.length>9?8:10,fill:'#52645b'},d.date.slice(8)+'/'+d.date.slice(5,7));});
   holder.style.overflowX='auto';holder.style.width='100%';holder.append(svg);holder.scrollLeft=holder.scrollWidth;
 }
 $('extraTrendMetric').addEventListener('change',()=>renderExtraNutrientTrend(lastExtraNutrientStats));
