@@ -1000,7 +1000,8 @@ function renderMealTrend(stats){
   const norm=Number($(metric==='protein'?'limit':'kcalGoal').value)|| (metric==='protein'?21.5:1500);
   const peak=Math.max(1,norm,...days.map(d=>d.total));
   const max=Math.max(metric==='protein'?5:100,metric==='protein'?Math.ceil(peak/5)*5:Math.ceil(peak/100)*100);
-  const width=Math.max(410,days.length*48+62),height=202,left=43,right=22,top=19,bottom=34,pw=width-left-right,ph=height-top-bottom;
+  const visibleWidth=Math.max(260,holder.clientWidth||300);
+  const width=Math.max(visibleWidth,Math.ceil(days.length/7*visibleWidth)),height=188,left=28,right=18,top=20,bottom=32,pw=width-left-right,ph=height-top-bottom;
   const x=i=>left+(i+.5)*pw/days.length;
   const y=v=>top+ph*(1-v/max);
   const NS='http://www.w3.org/2000/svg';
@@ -1010,7 +1011,7 @@ function renderMealTrend(stats){
   svg.setAttribute('role','img');svg.setAttribute('aria-label','Dagtotaal '+unit+' voor de laatste zeven kalenderdagen');
   const add=(tag,attrs,parent=svg)=>{const n=document.createElementNS(NS,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,String(v));parent.append(n);return n;};
   const txt=(px,py,value,anchor='middle')=>{const n=add('text',{x:px,y:py,'text-anchor':anchor,fill:'#61736b','font-size':10});n.textContent=value;};
-  for(let i=0;i<=4;i++){const v=max*i/4;add('line',{x1:left,y1:y(v),x2:width-right,y2:y(v),stroke:'#dfe9e3','stroke-width':1});txt(left-5,y(v)+3,metric==='protein'?String(Math.round(v*10)/10):String(Math.round(v)),'end');}
+  for(let i=0;i<=4;i++){const v=max*i/4;add('line',{x1:left,y1:y(v),x2:width-right,y2:y(v),stroke:'#dfe9e3','stroke-width':1});}
   const normY=y(norm);
   add('line',{x1:left,y1:normY,x2:width-right,y2:normY,stroke:'#2878b8','stroke-width':1.7,'stroke-dasharray':'5 4'});
   // De norm staat boven de grafiek, niet over de balkwaarden heen.
@@ -1022,7 +1023,8 @@ function renderMealTrend(stats){
     const parts=d.date.split('-');txt(x(i),height-19,parts[2]+'/'+parts[1]);
     const good=metric==='protein'?d.total<=norm:d.total>=norm;
     const barColor=!d.registered?'#b8c8c0':good?'#23846e':'#d64545';
-    const bar=add('rect',{x:x(i)-14,y:y(d.total),width:28,height:Math.max(0,ph*d.total/max),fill:barColor,rx:3});
+    const barWidth=Math.min(28,pw/days.length*.68);
+    const bar=add('rect',{x:x(i)-barWidth/2,y:y(d.total),width:barWidth,height:Math.max(0,ph*d.total/max),fill:barColor,rx:3});
     const valueLabel=add('text',{x:x(i),y:Math.max(11,y(d.total)-5),'text-anchor':'middle',fill:barColor,'font-size':10,'font-weight':'bold'});valueLabel.textContent=d.registered?(metric==='protein'?fmtProtein(d.total):fmt(d.total,0)):'–';
     const tooltip=add('title',{},bar);tooltip.textContent=`${d.date}: ${metric==='protein'?fmtProtein(d.total):fmt(d.total,0)} ${unit}${d.registered?'':' (geen registratie)'}`;
   });
@@ -1054,13 +1056,14 @@ function renderExtraNutrientTrend(stats,targetHolder=null,targetField=null,targe
   normInfo.textContent=guide.text+(guide.min!==undefined||guide.max!==undefined?' · blauwe stippellijn in grafiek · afstemmen met metabool diëtist':'');
   holder.append(normInfo);
   const goal=guide.max??guide.min??null;
-  const width=Math.max(410,days.length*48+65),height=205,L=48,R=20,T=25,B=35;
+  const visibleWidth=Math.max(260,holder.clientWidth||300);
+  const width=Math.max(visibleWidth,Math.ceil(days.length/7*visibleWidth)),height=188,L=28,R=18,T=22,B=32;
   const max=Math.max(1,...days.filter(d=>d.count>0).map(d=>d.sum),goal||0)*1.15;
   const ns='http://www.w3.org/2000/svg';
   const svg=document.createElementNS(ns,'svg');svg.setAttribute('viewBox',`0 0 ${width} ${height}`);svg.setAttribute('width',String(width));svg.setAttribute('height',String(height));svg.setAttribute('role','img');svg.setAttribute('aria-label',`${label} per dag; onbekende waarden zijn niet als nul getekend`);
   const el=(tag,attrs,text)=>{const n=document.createElementNS(ns,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,String(v));if(text!==undefined)n.textContent=text;svg.append(n);return n};
   const plotH=height-T-B,plotW=width-L-R,y=v=>T+plotH*(1-v/max);
-  for(let j=0;j<=4;j++){const val=max*j/4,yy=y(val);el('line',{x1:L,y1:yy,x2:width-R,y2:yy,stroke:'#dbe5df','stroke-width':1});el('text',{x:L-6,y:yy+4,'text-anchor':'end','font-size':10,fill:'#64756c'},fmt(val,1));}
+  for(let j=0;j<=4;j++){const val=max*j/4,yy=y(val);el('line',{x1:L,y1:yy,x2:width-R,y2:yy,stroke:'#dbe5df','stroke-width':1});}
   for(const bound of [guide.min,guide.max]){
     if(bound===undefined)continue;
     const yy=y(bound);
@@ -1596,12 +1599,39 @@ async function openFoodFactsFallback(q){
   }).filter(Boolean);
  }finally{clearTimeout(timeout)}
 }
+function searchStore(p){
+ const raw=String(p.store||'').trim(), n=smartNormalize(raw);
+ const aliases={'ah':'Albert Heijn','albert heijn':'Albert Heijn','jumbo':'Jumbo','picnic':'Picnic','plus':'PLUS','lidl':'Lidl'};
+ if(aliases[n])return aliases[n];
+ const brand=smartNormalize(p.brand), name=smartNormalize(p.name);
+ let host='';try{host=new URL(p.productUrl||p.url||'').hostname.toLowerCase()}catch{}
+ for(const [key,label] of Object.entries(aliases)){
+  const domain=key==='albert heijn'?'ah':key;
+  if(new RegExp('(^|\\.)'+domain+'\\.(nl|com|be)$').test(host)||brand===key||name.startsWith(key+' '))return label;
+ }
+ return raw;
+}
+function searchProtein(p){return p.protein==null||String(p.protein).trim()===''||!Number.isFinite(Number(p.protein))||Number(p.protein)<0?Infinity:Number(p.protein)}
+function sameSearchProduct(a,b){
+ const ac=String(a.code||a.barcode||''),bc=String(b.code||b.barcode||'');
+ if(ac&&bc)return ac===bc;
+ if(productId(a)===productId(b))return true;
+ const an=smartNormalize(a.name),bn=smartNormalize(b.name),as=smartNormalize(searchStore(a)),bs=smartNormalize(searchStore(b));
+ return an===bn&&as===bs&&(!a.quantity||!b.quantity||smartNormalize(a.quantity)===smartNormalize(b.quantity));
+}
+function orderedSearchProducts(items,q){
+ const known=[...explicitFavs,...favorites.map(f=>f.product),...familySearch.products,...recentProducts,...productLibrary].filter(Boolean);
+ const rank=p=>explicitFavs.some(f=>sameSearchProduct(f,p))?2:known.some(f=>sameSearchProduct(f,p))?1:0;
+ const sorted=items.map(p=>({...p,store:searchStore(p)})).sort((a,b)=>rank(b)-rank(a)||searchProtein(a)-searchProtein(b)||productSearchScore(b,q)-productSearchScore(a,q));
+ const out=[];for(const p of sorted){if(!out.some(x=>sameSearchProduct(x,p)))out.push(p)}return out;
+}
+
 let smartSearchSequence=0;
 async function search(){
  hideSuggestions();const q=$('query').value.trim();
  if(q.length<2){$('status').textContent='Vul minimaal twee letters in.';return}
  const sequence=++smartSearchSequence,store=$('store').value;
- const favMatches=localSearchCandidates(q,store).filter(x=>x.score>=12).map(x=>x.product);
+ const favMatches=orderedSearchProducts(localSearchCandidates(q,store).filter(x=>x.score>=12).map(x=>x.product),q);
  const offlineSearch=!navigator.onLine;
  $('searchBtn').disabled=true;$('status').textContent=favMatches.length?'⭐ '+favMatches.length+' favoriet(en) gevonden · overige producten zoeken…':'🔎 Producten zoeken…';$('results').replaceChildren();
  // Toon lokale favorieten meteen, ook wanneer externe zoekdiensten traag of onbereikbaar zijn.
@@ -1630,12 +1660,11 @@ async function search(){
   }
   if(sequence!==smartSearchSequence)return;
   products=products.filter(p=>productSearchScore(p,q)>=20);
-  products=[...favMatches,...products.filter(p=>!favMatches.some(f=>productId(f)===productId(p)))];
-  products.sort((a,b)=>familySearchBoost(b,q)-familySearchBoost(a,q)||Number(favMatches.some(f=>productId(f)===productId(b)))-Number(favMatches.some(f=>productId(f)===productId(a)))||Number(!!b.verifiedStorePage)-Number(!!a.verifiedStorePage)||smartStorePriority(a)-smartStorePriority(b)||Number(!!b.dutchMarket)-Number(!!a.dutchMarket)||Number(!!b.dutchLanguage)-Number(!!a.dutchLanguage)||productSearchScore(b,q)-productSearchScore(a,q));
+  products=orderedSearchProducts([...favMatches,...products],q);
   const data={products:products.slice(0,40)};
   const searchStatus=$('status');
   if(products.length){
-    searchStatus.textContent=`${products.length} producten gevonden${favMatches.length?' · ⭐ favorieten bovenaan':''}${products.length<2?' · minder dan 2 gecontroleerde resultaten; plak eventueel een productlink':''} · favorieten en gecontroleerde supermarktproducten${variants.length>1?' · ook op vergelijkbare namen gezocht':''}`;
+    searchStatus.textContent=`${products.length} producten gevonden${favMatches.length?' · ⭐ bekende producten bovenaan':''}${products.length<2?' · minder dan 2 gecontroleerde resultaten; plak eventueel een productlink':''} · overige op eiwit /100 g${variants.length>1?' · ook op vergelijkbare namen gezocht':''}`;
     searchStatus.style.cssText='';
   }else{
     // Geen resultaat is niet hetzelfde als een niet-bereikbare zoekservice.
@@ -1698,7 +1727,7 @@ function rememberProduct(p){
 }
 // Live productvoorstellen uit de voedingsdatabase, naast lokale favorieten en zoekgeschiedenis.
 const liveSuggestionCache=new Map();let liveSuggestionTimer=null,liveSuggestionRequest=0;
-function liveStoreMatches(p,store){if(store==='both'||store==='all'||store==='off')return true;const names={ah:'albert heijn',jumbo:'jumbo',picnic:'picnic',plus:'plus',lidl:'lidl'};return smartNormalize(p.store)===names[store]}
+function liveStoreMatches(p,store){if(store==='both'||store==='all'||store==='off')return true;const names={ah:'albert heijn',jumbo:'jumbo',picnic:'picnic',plus:'plus',lidl:'lidl'};return smartNormalize(searchStore(p))===names[store]}
 function scheduleLiveSuggestions(){
  clearTimeout(liveSuggestionTimer);const q=$('query').value.trim(),store=$('store').value,request=++liveSuggestionRequest;
  if(q.length<3){liveSuggestionProducts=[];showSuggestions();return}
@@ -1756,7 +1785,7 @@ function localSearchCandidates(q,store){
  explicitFavs.forEach(p=>add(p,5));
  favorites.forEach(f=>add(f.product,6));
  liveSuggestionProducts.forEach(p=>add(p,2));
- return [...found.values()].sort((a,b)=>familySearchBoost(b.product,q)-familySearchBoost(a.product,q)||b.score-a.score||b.priority-a.priority).slice(0,8);
+ return [...found.values()].sort((a,b)=>Number(b.priority>=4)-Number(a.priority>=4)||b.priority-a.priority||b.score-a.score);
 }
 // Gedeelde suggesties: favorieten blijven bewaard maar verschijnen direct in de zoekbalk.
 function sharedTopProducts(store){
