@@ -1644,9 +1644,7 @@ function diarySearchProducts(){
  return [...out.values()];
 }
 function orderedSearchProducts(items,q){
- const known=[...explicitFavs,...favorites.map(f=>f.product),...familySearch.products,...recentProducts,...productLibrary].filter(Boolean);
- const rank=p=>p.diaryUsed?3:explicitFavs.some(f=>sameSearchProduct(f,p))?2:known.some(f=>sameSearchProduct(f,p))?1:0;
- const sorted=items.filter(p=>Number.isFinite(searchProtein(p))&&!/open food facts/i.test(p.store||'')).map(p=>({...p,store:searchStore(p)})).sort((a,b)=>rank(b)-rank(a)||searchProtein(a)-searchProtein(b)||productSearchScore(b,q)-productSearchScore(a,q));
+ const sorted=items.filter(p=>Number.isFinite(searchProtein(p))&&!/open food facts/i.test(p.store||'')).map(p=>({...p,store:searchStore(p)})).sort((a,b)=>Number(!!b.diaryUsed)-Number(!!a.diaryUsed)||(a.diaryUsed&&b.diaryUsed?searchProtein(a)-searchProtein(b):searchProtein(b)-searchProtein(a))||productSearchScore(b,q)-productSearchScore(a,q));
  const out=[];for(const p of sorted){if(!out.some(x=>sameSearchProduct(x,p)))out.push(p)}return out;
 }
 
@@ -1688,7 +1686,7 @@ async function search(){
   const data={products:products.slice(0,40)};
   const searchStatus=$('status');
   if(products.length){
-    searchStatus.textContent=`${products.length} producten gevonden${favMatches.length?' · ⭐ bekende producten bovenaan':''}${products.length<2?' · minder dan 2 gecontroleerde resultaten; plak eventueel een productlink':''} · overige op eiwit /100 g${variants.length>1?' · ook op vergelijkbare namen gezocht':''}`;
+    searchStatus.textContent=`${products.length} producten gevonden${favMatches.length?' · ⭐ bekende producten bovenaan':''}${products.length<2?' · minder dan 2 gecontroleerde resultaten; plak eventueel een productlink':''} · overige op eiwit /100 g (hoog → laag)${variants.length>1?' · ook op vergelijkbare namen gezocht':''}`;
     searchStatus.style.cssText='';
   }else{
     // Geen resultaat is niet hetzelfde als een niet-bereikbare zoekservice.
@@ -1812,7 +1810,7 @@ function localSearchCandidates(q,store){
  favorites.forEach(f=>add(f.product,6));
  liveSuggestionProducts.forEach(p=>add(p,2));
  diarySearchProducts().forEach(p=>add(p,100));
- return [...found.values()].filter(x=>Number.isFinite(searchProtein(x.product))).sort((a,b)=>Number(!!b.product.diaryUsed)-Number(!!a.product.diaryUsed)||Number(b.priority>=4)-Number(a.priority>=4)||searchProtein(a.product)-searchProtein(b.product)||b.score-a.score);
+ return [...found.values()].filter(x=>Number.isFinite(searchProtein(x.product))).sort((a,b)=>Number(!!b.product.diaryUsed)-Number(!!a.product.diaryUsed)||(a.product.diaryUsed&&b.product.diaryUsed?searchProtein(a.product)-searchProtein(b.product):searchProtein(b.product)-searchProtein(a.product))||b.score-a.score);
 }
 // Gedeelde suggesties: favorieten blijven bewaard maar verschijnen direct in de zoekbalk.
 function sharedTopProducts(store){
